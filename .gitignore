@@ -1,0 +1,46 @@
+# Gradle & Build caches
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Minecraft runtime runs, saves, test worlds and logs
+run/
+**/run/
+run-lab/
+**/run-lab/
+run-data/
+**/run-data/
+*.mca
+**/*.mca
+*.log
+**/*.log
+*_log.txt
+**/*_log.txt
+*_output.txt
+**/*_output.txt
+
+# IDE & Editor files
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+.eclipse/
+**/.eclipse/
+bin/
+**/bin/
+out/
+**/out/
+*.launch
+.settings/
+.metadata/
+.classpath
+.project
+*.ipr
+*.iws
+*.iml
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

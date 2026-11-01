@@ -1,0 +1,8 @@
+{
+  "type": "minecraft:max",
+  "argument1": 0.15,
+  "argument2": {
+    "type": "minecraft:abs",
+    "argument": "tectonic:noise/continent/ridges"
+  }
+}
