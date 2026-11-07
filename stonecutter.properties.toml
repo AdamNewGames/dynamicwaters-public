@@ -1,0 +1,45 @@
+[mod]
+id = "dynamicwaters"
+name = "Dynamic Waters"
+group = "com.AdamNew"
+version = "13.1.0"
+channel_tag = ""
+description = "Reworks water systems to form realistic rivers that flow naturally through the terrain."
+authors = ["AdamNew"]
+contributors = []
+inception_year = "2025"
+license.name = "MPL-2.0"
+license.url = "https://www.mozilla.org/en-US/MPL/2.0/"
+license.dist = "repo"
+environment = "client_and_server"
+sources_url = "https://github.com/AdamNewGames/dynamicwaters-public"
+homepage_url = "https://github.com/AdamNewGames/dynamicwaters-public"
+issues_url = "https://github.com/AdamNewGames/dynamicwaters-public/issues"
+discord_url = "https://discord.gg/s6XMKJtEN5"
+dev_jvm_args = [
+	"-Dfile.encoding=UTF-8"
+]
+dev_jvm_args_mixin_debug = []
+
+[fabric]
+deps.fabric-loader = "0.19.2"
+
+[fabric."1.21.1"]
+deps.minecraft = "1.21.1"
+deps.fabric-api = "0.116.7+1.21.1"
+deps.modmenu = "11.0.4"
+deps.parchment = "1.21.1:2024.11.17"
+deps.forgeconfigapiport = "21.1.6"
+
+[neoforge]
+
+[neoforge."1.21.1"]
+deps.minecraft = "1.21.1"
+deps.neoforge = "21.1.234"
+deps.parchment = "1.21.1:2024.11.17"
+
+[forge]
+
+[forge."1.20.1"]
+deps.minecraft = "1.20.1"
+deps.forge = "47.4.10"

@@ -1,16 +1,17 @@
 # Dynamic Waters
 
-A NeoForge mod for Minecraft 1.21.1 that reworks water in world generation: mountain rivers routed over the real
-terrain, lowland rivers with deltas, mountain lakes, riverbanks and river currents.
+A mod for NeoForge and Fabric on Minecraft 1.21.1 and Forge on 1.20.1 that reworks water in world generation: mountain
+rivers routed over the real terrain, lowland rivers with deltas, mountain lakes, riverbanks and river currents.
 
 ## Building
 
+One source tree builds every version with [Stonecutter](https://stonecutter.kikugie.dev). Gradle needs Java 25.
+
 ```
-cd dynamicwaters-12.4-12.4.2/dynamicwaters-12.4/neoforge
-./gradlew build
+./gradlew :1.21.1-neoforge:build :1.21.1-fabric:build :1.20.1-forge:build -x javadoc -x javadocJar
 ```
 
-The jar is written to `build/libs`.
+Each jar is written to `versions/<version>/build/libs`. Replace `build` with `runClient` to start the game.
 
 ## AI assistance
 

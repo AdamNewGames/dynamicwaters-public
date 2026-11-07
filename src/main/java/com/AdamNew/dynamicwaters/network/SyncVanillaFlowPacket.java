@@ -1,0 +1,42 @@
+package com.AdamNew.dynamicwaters.network;
+
+import net.minecraft.network.FriendlyByteBuf;
+//? if >=1.20.5 {
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+//?}
+
+public record SyncVanillaFlowPacket(int chunkX, int chunkZ, byte[] angles) implements Payload {
+    //? if >=1.20.5 {
+    public static final Type<SyncVanillaFlowPacket> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath("dynamicwaters", "sync_vanilla_flow"));
+
+    public static final StreamCodec<FriendlyByteBuf, SyncVanillaFlowPacket> STREAM_CODEC = StreamCodec.ofMember(
+            SyncVanillaFlowPacket::write,
+            SyncVanillaFlowPacket::new);
+    //?}
+
+    public SyncVanillaFlowPacket(FriendlyByteBuf buffer) {
+        this(buffer.readInt(), buffer.readInt(), readAngles(buffer));
+    }
+
+    private static byte[] readAngles(FriendlyByteBuf buffer) {
+        final byte[] a = new byte[16];
+        buffer.readBytes(a);
+        return a;
+    }
+
+    public void write(FriendlyByteBuf buffer) {
+        buffer.writeInt(chunkX);
+        buffer.writeInt(chunkZ);
+        buffer.writeBytes(angles, 0, 16);
+    }
+
+    //? if >=1.20.5 {
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+    //?}
+}

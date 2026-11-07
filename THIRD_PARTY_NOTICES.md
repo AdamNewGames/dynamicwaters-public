@@ -3,7 +3,7 @@
 Dynamic Waters is licensed under the Mozilla Public License 2.0 (see [LICENSE](LICENSE)). The files below are
 adapted from other projects and keep those projects' licences. Each one also says so in a notice at its top.
 
-Paths are relative to `dynamicwaters-12.4-12.4.2/dynamicwaters-12.4/neoforge/src/main/java/com/AdamNew/dynamicwaters/`.
+Paths are relative to `src/main/java/com/AdamNew/dynamicwaters/`.
 
 ## TerraFirmaCraft
 
@@ -59,6 +59,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Stonecutter mod template
+
+- Source: https://github.com/rotgruengelb/stonecutter-mod-template
+- Copyright (c) 2025 murder_spagurder, rotgruengelb and stonecutter-mod-template contributors
+- Licence: MIT, see [build-logic/LICENSE](build-logic/LICENSE)
+
+The build setup comes from this template: `build-logic/`, `build.*.gradle.kts`, `settings.gradle.kts`,
+`stonecutter.gradle.kts` and `gradle/`, at the root of the repository.
 
 ## Minecraft
 

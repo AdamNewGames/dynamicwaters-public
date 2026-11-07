@@ -1,0 +1,37 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.AdamNew.dynamicwaters.mixin",
+  "compatibilityLevel": "${java}",
+  "refmap": "dynamicwaters.refmap.json",
+  "mixins": [
+    "AbridgedBridgeMixin",
+    "BiomeFreezeMixin",
+    "BiomeSourceMixin",
+    "CanyonCarverMixin",
+    "ChunkGeneratorMixin",
+    "EntityMixin",
+    "FlowingFluidMixin",
+    "ItemEntityMixin",
+    "LivingEntityMixin",
+    "ModernBetaChunkGeneratorMixin",
+    "MultiNoiseBiomeSourceMixin",
+    "NoiseChunkGeneratorMixin",
+    "NoiseGeneratorSettingsMixin",
+    "RandomStateMixin",
+    "SpringFeatureMixin",
+    "StructureMixin",
+    "SurfaceSystemAccessor",
+    "TreeFeatureMixin",
+    "WorldCarverMixin"
+  ],
+  "client": [
+    "ConfigurationScreenMixin",
+    "client.LevelLoadingScreenMixin",
+    "TitleScreenMixin",
+    "WaterParticleMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
