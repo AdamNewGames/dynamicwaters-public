@@ -24,6 +24,13 @@ public class ChunkGeneratorMixin {
     private volatile boolean dynamicwaters$riversFound;
 
     @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
+    private void dynamicwaters$containAcrossChunks(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager,
+            CallbackInfo ci) {
+        if (!com.AdamNew.dynamicwaters.HydrologyManager.riversIn(level.getLevel())) return;
+        com.AdamNew.dynamicwaters.HydrologyManager.containAcrossChunks(level, chunk, (ChunkGenerator) (Object) this);
+    }
+
+    @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
     private void dynamicwaters$riverLogs(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager,
             CallbackInfo ci) {
         if (RiverLogs.wanted(level)) RiverLogs.lay(level, chunk);

@@ -2,7 +2,7 @@
 id = "dynamicwaters"
 name = "Dynamic Waters"
 group = "com.AdamNew"
-version = "13.1.0"
+version = "13.1.1"
 channel_tag = ""
 description = "Reworks water systems to form realistic rivers that flow naturally through the terrain."
 authors = ["AdamNew"]

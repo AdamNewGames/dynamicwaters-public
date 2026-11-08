@@ -147,6 +147,106 @@ public class HydrologyManager {
         return (int) Math.round(RIVER_BED_NOISE.getValue(x * 0.4, z * 0.4) * 3.5);
     }
 
+    public static boolean holdsWater(RiverCarving c) {
+        return c != null && c.modifies && !c.isWatershedWall && c.waterLevel > c.targetY;
+    }
+
+    public static net.minecraft.world.level.block.state.BlockState holdFill(net.minecraft.world.level.BlockGetter getter,
+            net.minecraft.core.BlockPos.MutableBlockPos at) {
+        final int y = at.getY();
+        final net.minecraft.world.level.block.state.BlockState rock = y < 0
+                ? net.minecraft.world.level.block.Blocks.DEEPSLATE.defaultBlockState()
+                : net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        for (int up = 1; up <= 4; up++) {
+            final net.minecraft.world.level.block.state.BlockState s = getter.getBlockState(at.setY(y + up));
+            if (s.isAir() || !s.getFluidState().isEmpty()) continue;
+            at.setY(y);
+            if (s.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || s.is(net.minecraft.world.level.block.Blocks.MYCELIUM)
+                    || s.is(net.minecraft.world.level.block.Blocks.PODZOL) || s.is(net.minecraft.world.level.block.Blocks.DIRT)
+                    || s.is(net.minecraft.world.level.block.Blocks.COARSE_DIRT) || s.is(net.minecraft.world.level.block.Blocks.ROOTED_DIRT)) {
+                return net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState();
+            }
+            if (s.is(net.minecraft.world.level.block.Blocks.SAND) || s.is(net.minecraft.world.level.block.Blocks.SANDSTONE)) {
+                return net.minecraft.world.level.block.Blocks.SANDSTONE.defaultBlockState();
+            }
+            if (s.is(net.minecraft.world.level.block.Blocks.RED_SAND) || s.is(net.minecraft.world.level.block.Blocks.RED_SANDSTONE)) {
+                return net.minecraft.world.level.block.Blocks.RED_SANDSTONE.defaultBlockState();
+            }
+            if (s.is(net.minecraft.world.level.block.Blocks.DEEPSLATE) || s.is(net.minecraft.world.level.block.Blocks.TUFF)
+                    || s.is(net.minecraft.world.level.block.Blocks.ANDESITE) || s.is(net.minecraft.world.level.block.Blocks.DIORITE)
+                    || s.is(net.minecraft.world.level.block.Blocks.GRANITE) || s.is(net.minecraft.world.level.block.Blocks.CALCITE)
+                    || s.is(net.minecraft.world.level.block.Blocks.CLAY) || s.is(net.minecraft.world.level.block.Blocks.MUD)) {
+                return s;
+            }
+            return rock;
+        }
+
+        net.minecraft.world.level.block.state.BlockState under = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        for (int down = 1; down <= 8; down++) {
+            under = getter.getBlockState(at.setY(y - down));
+            if (!under.isAir() && under.getFluidState().isEmpty()) break;
+        }
+        at.setY(y);
+        if (under.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || under.is(net.minecraft.world.level.block.Blocks.DIRT)
+                || under.is(net.minecraft.world.level.block.Blocks.COARSE_DIRT) || under.is(net.minecraft.world.level.block.Blocks.PODZOL)
+                || under.is(net.minecraft.world.level.block.Blocks.ROOTED_DIRT) || under.is(net.minecraft.world.level.block.Blocks.MYCELIUM)) {
+            return net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState();
+        }
+        if (under.is(net.minecraft.world.level.block.Blocks.SAND) || under.is(net.minecraft.world.level.block.Blocks.RED_SAND)
+                || under.is(net.minecraft.world.level.block.Blocks.GRAVEL) || under.is(net.minecraft.world.level.block.Blocks.CLAY)
+                || under.is(net.minecraft.world.level.block.Blocks.MUD)) {
+            return under;
+        }
+        return rock;
+    }
+
+    private static boolean underRoof(net.minecraft.world.level.BlockGetter getter, int x, int y, int z) {
+        final net.minecraft.core.BlockPos.MutableBlockPos at = new net.minecraft.core.BlockPos.MutableBlockPos();
+        for (int up = 1; up <= CONTAIN_ROOF_REACH; up++) {
+            final net.minecraft.world.level.block.state.BlockState s = getter.getBlockState(at.set(x, y + up, z));
+            if (s.isAir() || !s.getFluidState().isEmpty()) continue;
+            if (s.is(net.minecraft.tags.BlockTags.LEAVES) || s.is(net.minecraft.tags.BlockTags.LOGS)) continue;
+            if (s.isSolidRender(getter, at)) return true;
+        }
+        return false;
+    }
+
+    private static final int CONTAIN_ROOF_REACH = 48;
+
+    public static void containAcrossChunks(net.minecraft.world.level.WorldGenLevel level,
+            net.minecraft.world.level.chunk.ChunkAccess chunk,
+            net.minecraft.world.level.chunk.ChunkGenerator generator) {
+        final net.minecraft.world.level.ChunkPos cp = chunk.getPos();
+        final int[] band = takeWaterBand(cp.toLong());
+        if (band == null) return;
+        final int sx = cp.getMinBlockX(), sz = cp.getMinBlockZ();
+        final int sea = generator.getSeaLevel();
+        final net.minecraft.world.level.levelgen.RandomState random = level.getLevel().getChunkSource().randomState();
+        final net.minecraft.core.BlockPos.MutableBlockPos at = new net.minecraft.core.BlockPos.MutableBlockPos();
+        final net.minecraft.core.BlockPos.MutableBlockPos next = new net.minecraft.core.BlockPos.MutableBlockPos();
+        final int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int lx = 0; lx < 16; lx++) {
+            for (int lz = 0; lz < 16; lz++) {
+                if (lx != 0 && lx != 15 && lz != 0 && lz != 15) continue;
+                for (int y = band[1]; y >= band[0]; y--) {
+                    if (!chunk.getBlockState(at.set(sx + lx, y, sz + lz)).is(net.minecraft.world.level.block.Blocks.WATER)) continue;
+                    for (int[] d : sides) {
+                        final int nlx = lx + d[0], nlz = lz + d[1];
+                        if (nlx >= 0 && nlx <= 15 && nlz >= 0 && nlz <= 15) continue;
+                        final int nx = sx + nlx, nz = sz + nlz;
+                        if (!level.getBlockState(next.set(nx, y, nz)).isAir()) continue;
+                        if (!underRoof(level, nx, y, nz)) continue;
+                        final RiverCarving n = calculateRiverCarving(nx, nz,
+                                generator.getBaseHeight(nx, nz, net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG, level, random) - 1,
+                                sea, generator, level, random);
+                        if (holdsWater(n) && y > n.waterLevel) continue;
+                        level.setBlock(next, holdFill(level, next), 2);
+                    }
+                }
+            }
+        }
+    }
+
     private static final int SEAL_MIN = 5;
     private static final double SEAL_PER_WIDTH = 5.0;
 
@@ -545,6 +645,124 @@ public class HydrologyManager {
         return filled;
     }
 
+    private static final int CAVE_GUARD_REACH = 8;
+    private static final int CAVE_GUARD_DEPTH = 12;
+
+    public static int[] caveGuard(RiverCarving[] carvings) {
+        final int[] own = new int[256];
+        for (int i = 0; i < 256; i++) {
+            final RiverCarving c = carvings[i];
+            own[i] = c != null && c.modifies ? c.waterLevel : Integer.MIN_VALUE;
+        }
+        final int[] rows = new int[256];
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                int m = Integer.MIN_VALUE;
+                for (int nx = Math.max(0, x - CAVE_GUARD_REACH); nx <= Math.min(15, x + CAVE_GUARD_REACH); nx++) {
+                    m = Math.max(m, own[nx + z * 16]);
+                }
+                rows[x + z * 16] = m;
+            }
+        }
+        final int[] near = new int[256];
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                int m = Integer.MIN_VALUE;
+                for (int nz = Math.max(0, z - CAVE_GUARD_REACH); nz <= Math.min(15, z + CAVE_GUARD_REACH); nz++) {
+                    m = Math.max(m, rows[x + nz * 16]);
+                }
+                near[x + z * 16] = m;
+            }
+        }
+        return near;
+    }
+
+    public static void cancelCaves(net.minecraft.world.level.chunk.ChunkAccess chunk, int x, int z, int top, int level,
+            net.minecraft.world.level.block.state.BlockState ground, java.util.BitSet protectedBlocks, int minH) {
+        final net.minecraft.core.BlockPos.MutableBlockPos pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+        for (int y = top - 1; y >= Math.max(minH, level - CAVE_GUARD_DEPTH); y--) {
+            if (protectedBlocks != null && protectedBlocks.get(y - minH)) continue;
+            final net.minecraft.world.level.block.state.BlockState here = chunk.getBlockState(pos.set(x, y, z));
+            if (here.isAir() || !here.getFluidState().isEmpty()) chunk.setBlockState(pos, ground, false);
+        }
+    }
+
+    public static final int SHAFT_DEPTH = 3;
+
+    private static final int SHAFT_REACH = 2;
+
+    public static boolean repairsColumn(double x, double z, net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.chunk.ChunkAccess chunk, net.minecraft.world.level.levelgen.RandomState randomState) {
+        final WatershedContext mountainCtx = evaluateWatershedContext(x, z, generator, chunk, randomState, false);
+        if (mountainCtx.bestPath != null && mountainCtx.distance < mountainCtx.width + 40.0) return true;
+        if (isInOrBesideLake(x, z)) return true;
+        final com.AdamNew.dynamicwaters.river.RiverContext macroInfo = MainRivers.findNearest(x, z, generator, chunk, randomState);
+        if (macroInfo == null) return false;
+
+        final double waterR = normalRiverWaterRadius(Math.sqrt(macroInfo.widthSq()));
+        return macroInfo.distSq() < waterR * waterR;
+    }
+
+    public static boolean dryHollow(net.minecraft.world.level.chunk.ChunkAccess chunk, int x, int z, int top, int seaLevel) {
+        if (top >= seaLevel - 1) return false;
+        return chunk.getBlockState(new net.minecraft.core.BlockPos(x, top + 1, z)).isAir();
+    }
+
+    public static int shaftFloor(int i, int top, int waterLevel, int[] ground, RiverCarving[] carvings, boolean[] mouths,
+            boolean[] filled) {
+        final int x = i & 15, z = i >> 4;
+        int deepest = -1;
+        double shore = Double.MAX_VALUE;
+        for (int reach = SHAFT_REACH; deepest < 0 && reach <= 16; reach *= 2) {
+            for (int nz = Math.max(0, z - reach); nz <= Math.min(15, z + reach); nz++) {
+                for (int nx = Math.max(0, x - reach); nx <= Math.min(15, x + reach); nx++) {
+                    final int j = nx + nz * 16;
+                    final RiverCarving c = carvings[j];
+                    if (j == i || mouths[j] || c == null) continue;
+                    final int bed = c.modifies && !filled[j] ? Math.min(c.targetY, ground[j]) : ground[j];
+                    final int depth = c.isWatershedWall ? 0 : Math.max(0, c.waterLevel - bed);
+                    final double d = Math.sqrt((nx - x) * (nx - x) + (nz - z) * (nz - z));
+                    if (depth == 0) {
+                        shore = Math.min(shore, d);
+                    } else if (d <= reach) {
+                        deepest = Math.max(deepest, depth);
+                    }
+                }
+            }
+        }
+        int depth = deepest >= 0 ? deepest : SHAFT_DEPTH;
+        if (shore < Double.MAX_VALUE) depth = Math.min(depth, (int) shore + 1);
+        return Math.max(top, waterLevel - Math.max(SHAFT_MIN_DEPTH, depth));
+    }
+
+    private static final int SHAFT_MIN_DEPTH = 2;
+
+    public static int digHollow(net.minecraft.world.level.chunk.ChunkAccess chunk, int x, int z, int top, int floor,
+            java.util.BitSet protectedBlocks, int minH) {
+        final net.minecraft.core.BlockPos.MutableBlockPos pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+        int dug = top;
+        for (int y = top; y > floor; y--) {
+            if (protectedBlocks != null && y >= minH && protectedBlocks.get(y - minH)) break;
+            chunk.setBlockState(pos.set(x, y, z), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), false);
+            dug = y - 1;
+        }
+        return dug;
+    }
+
+    public static int fillHollow(net.minecraft.world.level.chunk.ChunkAccess chunk, int x, int z, int top, int floor,
+            net.minecraft.world.level.block.state.BlockState ground, java.util.BitSet protectedBlocks, int minH) {
+        final net.minecraft.core.BlockPos.MutableBlockPos pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+        int filled = top;
+        for (int y = top + 1; y <= floor; y++) {
+            if (protectedBlocks != null && y >= minH && protectedBlocks.get(y - minH)) break;
+            final net.minecraft.world.level.block.state.BlockState here = chunk.getBlockState(pos.set(x, y, z));
+            if (!here.isAir() && here.getFluidState().isEmpty()) break;
+            chunk.setBlockState(pos, ground, false);
+            filled = y;
+        }
+        return filled;
+    }
+
     public static boolean isOceanBiomeAt(net.minecraft.world.level.chunk.ChunkGenerator generator, int x, int z,
             net.minecraft.world.level.levelgen.RandomState randomState) {
         if (generator == null || randomState == null)
@@ -601,10 +819,22 @@ public class HydrologyManager {
         return PRE_CARVE_HEIGHTS.remove(chunkKey);
     }
 
+    private static final java.util.concurrent.ConcurrentHashMap<Long, int[]> WATER_BANDS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void rememberWaterBand(long chunkKey, int low, int high) {
+        if (WATER_BANDS.size() > 4096) WATER_BANDS.clear();
+        WATER_BANDS.put(chunkKey, new int[] {low, high});
+    }
+
+    public static int[] takeWaterBand(long chunkKey) {
+        return WATER_BANDS.remove(chunkKey);
+    }
+
     public static void clearCaches() {
         WATERSHED_REGION_CACHE.clear();
         HEAD_FEEDS.clear();
         PRE_CARVE_HEIGHTS.clear();
+        WATER_BANDS.clear();
         TILE_BUILDS.clear();
         BasinTile.clearSeamCache();
         CoarseHeightField.reset();

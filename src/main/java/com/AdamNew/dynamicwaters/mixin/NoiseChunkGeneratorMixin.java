@@ -24,6 +24,50 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class NoiseChunkGeneratorMixin {
     private static final ThreadLocal<int[][]> ORIGINAL_HEIGHT_CACHE = ThreadLocal.withInitial(() -> new int[16][16]);
 
+    @org.spongepowered.asm.mixin.Unique
+    private static final int[] DYNAMICWATERS$SIDE_X = {1, -1, 0, 0};
+    @org.spongepowered.asm.mixin.Unique
+    private static final int[] DYNAMICWATERS$SIDE_Z = {0, 0, 1, -1};
+
+    @org.spongepowered.asm.mixin.Unique
+    private static void dynamicwaters$containWater(ChunkAccess chunk, int startX, int startZ,
+            HydrologyManager.RiverCarving[] carvings, int[] original, boolean[] repaired, java.util.BitSet[] protectedMap,
+            int minH) {
+        int low = Integer.MAX_VALUE, high = Integer.MIN_VALUE;
+        final int[] bed = new int[256];
+        for (int i = 0; i < 256; i++) {
+            final HydrologyManager.RiverCarving c = carvings[i];
+            bed[i] = Integer.MAX_VALUE;
+            if (c == null || !(HydrologyManager.holdsWater(c) || repaired[i])) continue;
+            final int floor = c.modifies ? c.targetY : original[i];
+            if (c.isWatershedWall || c.waterLevel <= floor) continue;
+            bed[i] = floor;
+            low = Math.min(low, floor + 1);
+            high = Math.max(high, c.waterLevel);
+        }
+        if (low > high) return;
+        HydrologyManager.rememberWaterBand(chunk.getPos().toLong(), low, high);
+        final BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int i = 0; i < 256; i++) {
+            if (bed[i] == Integer.MAX_VALUE) continue;
+            final int x = i & 15, z = i >> 4;
+            for (int y = bed[i] + 1; y <= carvings[i].waterLevel; y++) {
+                if (!chunk.getBlockState(at.set(startX + x, y, startZ + z)).is(Blocks.WATER)) continue;
+                for (int d = 0; d < 4; d++) {
+                    final int nx = x + DYNAMICWATERS$SIDE_X[d], nz = z + DYNAMICWATERS$SIDE_Z[d];
+                    if (nx < 0 || nx > 15 || nz < 0 || nz > 15) continue;
+                    final int j = nx + nz * 16;
+                    final HydrologyManager.RiverCarving n = carvings[j];
+                    if (HydrologyManager.holdsWater(n) && y > n.waterLevel) continue;
+                    final java.util.BitSet p = protectedMap[j];
+                    if (p != null && y >= minH && p.get(y - minH)) continue;
+                    at.set(startX + nx, y, startZ + nz);
+                    if (chunk.getBlockState(at).isAir()) chunk.setBlockState(at, HydrologyManager.holdFill(chunk, at), false);
+                }
+            }
+        }
+    }
+
     @org.spongepowered.asm.mixin.Shadow
     private net.minecraft.world.level.levelgen.NoiseChunk createNoiseChunk(ChunkAccess chunk, StructureManager structureManager,
             net.minecraft.world.level.levelgen.blending.Blender blender, RandomState random) {
@@ -154,6 +198,84 @@ public class NoiseChunkGeneratorMixin {
         }
         com.AdamNew.dynamicwaters.LakeHollows.setChunkGround(startX, startZ, preCarve);
 
+        final HydrologyManager.RiverCarving[] carvings = new HydrologyManager.RiverCarving[256];
+        for (int i = 0; i < 256; i++) {
+            if (HydrologyManager.isOceanBiome(columnBiomes[i]) && preCarve[i] < seaLevel - 4) continue;
+            carvings[i] = HydrologyManager.calculateRiverCarving(startX + (i & 15), startZ + (i >> 4), preCarve[i], seaLevel,
+                    (net.minecraft.world.level.chunk.ChunkGenerator) (Object) this, chunk, random);
+        }
+        final int[] guard = HydrologyManager.caveGuard(carvings);
+
+        final boolean[] mouths = new boolean[256];
+        boolean refilled = false;
+        for (int i = 0; i < 256; i++) {
+            final int sx = startX + (i & 15), sz = startZ + (i >> 4);
+            final HydrologyManager.RiverCarving shaft = carvings[i];
+            if (shaft == null || !HydrologyManager.dryHollow(chunk, sx, sz, preCarve[i], seaLevel)) continue;
+
+            final boolean lays = shaft.modifies
+                    ? HydrologyManager.holdsWater(shaft) && shaft.targetY >= preCarve[i]
+                    : shaft.waterLevel > preCarve[i] && HydrologyManager.repairsColumn(sx, sz,
+                            (net.minecraft.world.level.chunk.ChunkGenerator) (Object) this, chunk, random);
+            if (lays) {
+                mouths[i] = true;
+                guard[i] = Math.max(guard[i], shaft.waterLevel);
+                continue;
+            }
+            if (guard[i] == Integer.MIN_VALUE) continue;
+            final int was = preCarve[i];
+            preCarve[i] = HydrologyManager.fillHollow(chunk, sx, sz, was, seaLevel - 1, poolGround, protectedBlocksMap[i], minH);
+            if (preCarve[i] == was) continue;
+            refilled = true;
+
+            int rim = preCarve[i];
+            for (int dz = -3; dz <= 3; dz++) {
+                for (int dx = -3; dx <= 3; dx++) {
+                    final int nx = (i & 15) + dx, nz = (i >> 4) + dz;
+                    if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16) rim = Math.max(rim, preCarve[nx + nz * 16]);
+                }
+            }
+            HydrologyManager.gorgeDress(chunk, sx, sz, preCarve[i], seaLevel - 1, false, protectedBlocksMap[i], minH,
+                    surfaceGround, rim);
+        }
+
+        final int[] laidBed = new int[256];
+        System.arraycopy(preCarve, 0, laidBed, 0, 256);
+        final boolean[] channelBed = new boolean[256];
+        final boolean[] unknown = new boolean[256];
+        for (int i = 0; i < 256; i++) {
+            if (!mouths[i]) continue;
+            final int water = carvings[i].waterLevel;
+            final HydrologyManager.RiverCarving bed = HydrologyManager.calculateRiverCarving(startX + (i & 15), startZ + (i >> 4),
+                    water + 1, seaLevel, (net.minecraft.world.level.chunk.ChunkGenerator) (Object) this, chunk, random);
+            if (bed.modifies && !bed.isWatershedWall && bed.waterLevel >= water && bed.targetY < water - 1) {
+                laidBed[i] = bed.targetY;
+                channelBed[i] = true;
+            } else {
+                unknown[i] = true;
+            }
+        }
+        for (int i = 0; i < 256; i++) {
+            if (!mouths[i]) continue;
+            final int was = preCarve[i];
+            final int sx = startX + (i & 15), sz = startZ + (i >> 4);
+            if (channelBed[i]) {
+                final int floor = Math.min(laidBed[i], HydrologyManager.shaftFloor(i, Integer.MIN_VALUE, carvings[i].waterLevel,
+                        laidBed, carvings, unknown, channelBed));
+                preCarve[i] = floor < was ? HydrologyManager.digHollow(chunk, sx, sz, was, floor, protectedBlocksMap[i], minH)
+                        : HydrologyManager.fillHollow(chunk, sx, sz, was, floor, poolGround, protectedBlocksMap[i], minH);
+            } else {
+                final int floor = HydrologyManager.shaftFloor(i, was, carvings[i].waterLevel, laidBed, carvings, unknown, channelBed);
+                preCarve[i] = HydrologyManager.fillHollow(chunk, sx, sz, was, floor, poolGround, protectedBlocksMap[i], minH);
+            }
+            if (preCarve[i] != was) refilled = true;
+        }
+        for (int i = 0; i < 256; i++) {
+            if (guard[i] == Integer.MIN_VALUE) continue;
+            HydrologyManager.cancelCaves(chunk, startX + (i & 15), startZ + (i >> 4), preCarve[i], guard[i], poolGround,
+                    protectedBlocksMap[i], minH);
+        }
+
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 double worldX = startX + x;
@@ -165,7 +287,8 @@ public class NoiseChunkGeneratorMixin {
                     continue;
                 }
 
-                HydrologyManager.RiverCarving carving = HydrologyManager.calculateRiverCarving(worldX, worldZ, originalY, seaLevel, ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this), chunk, random);
+                HydrologyManager.RiverCarving carving = !refilled && carvings[x + z * 16] != null ? carvings[x + z * 16]
+                        : HydrologyManager.calculateRiverCarving(worldX, worldZ, originalY, seaLevel, ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this), chunk, random);
                 int targetY = carving.targetY;
                 int cavernRoofY = carving.cavernRoofY;
                 int carveTopY = Math.min(originalY, cavernRoofY);
@@ -421,6 +544,8 @@ public class NoiseChunkGeneratorMixin {
             final HydrologyManager.RiverCarving[] skinCarvings = new HydrologyManager.RiverCarving[256];
             final int[] skinOriginal = new int[256];
 
+            final boolean[] repairedWater = new boolean[256];
+
             final int[][] preHeights = ORIGINAL_HEIGHT_CACHE.get();
             final int[] repairGround = new int[256];
             for (int i = 0; i < 256; i++) repairGround[i] = preHeights[i & 15][i >> 4];
@@ -430,24 +555,12 @@ public class NoiseChunkGeneratorMixin {
                     double worldX = startX + x;
                     double worldZ = startZ + z;
 
-                    boolean inRiver = false;
                     net.minecraft.world.level.chunk.ChunkGenerator generator = ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this);
-                    HydrologyManager.WatershedContext mountainCtx = HydrologyManager.evaluateWatershedContext(worldX, worldZ, generator, chunk, randomState, false);
-                    if (mountainCtx.bestPath != null && mountainCtx.distance < mountainCtx.width + 40.0) {
-                        inRiver = true;
-                    }
-                    if (!inRiver && HydrologyManager.isInOrBesideLake(worldX, worldZ)) {
-                        inRiver = true;
-                    }
+                    boolean inRiver = HydrologyManager.repairsColumn(worldX, worldZ, generator, chunk, randomState);
 
                     com.AdamNew.dynamicwaters.river.RiverContext macroInfo =
                         com.AdamNew.dynamicwaters.MainRivers.findNearest(worldX, worldZ, generator, chunk, randomState);
-
                     final double macroWidth = macroInfo != null ? Math.sqrt(macroInfo.widthSq()) : 0.0;
-                    if (macroInfo != null) {
-                        final double waterR = HydrologyManager.normalRiverWaterRadius(macroWidth);
-                        if (macroInfo.distSq() < waterR * waterR) inRiver = true;
-                    }
 
                     boolean skinOnly = false;
                     if (!inRiver) {
@@ -506,6 +619,7 @@ public class NoiseChunkGeneratorMixin {
                     if (!carving.isWatershedWall && targetY == originalY && carving.waterLevel <= originalY) {
                         continue;
                     }
+                    if (!carving.isWatershedWall && carving.waterLevel > targetY) repairedWater[x + z * 16] = true;
 
                     BlockState topBlock2 = Blocks.GRASS_BLOCK.defaultBlockState();
                     BlockState fillerBlock2 = Blocks.DIRT.defaultBlockState();
@@ -619,8 +733,10 @@ public class NoiseChunkGeneratorMixin {
                     }
                 }
             }
+
+            dynamicwaters$containWater(chunk, startX, startZ, skinCarvings, skinOriginal, repairedWater, protectedBlocksMap2, minH);
             com.AdamNew.dynamicwaters.LakeHollows.clearChunkGround();
-            com.AdamNew.dynamicwaters.shore.ShoreSkin.apply(chunk, skinCarvings, skinOriginal, protectedBlocksMap2, minH, startX, startZ,
+            com.AdamNew.dynamicwaters.shore.ShoreSkin.apply(chunk, skinCarvings, skinOriginal, repairedWater, protectedBlocksMap2, minH, startX, startZ,
                     ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this).getBiomeSource(), randomState.sampler());
 
             com.AdamNew.dynamicwaters.shore.WaterPlants.plant(chunk, skinCarvings, skinOriginal, protectedBlocksMap2, minH, startX, startZ,

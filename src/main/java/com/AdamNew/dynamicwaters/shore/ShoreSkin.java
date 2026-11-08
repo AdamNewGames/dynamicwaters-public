@@ -43,9 +43,17 @@ public final class ShoreSkin {
     private ShoreSkin() {
     }
 
-    public static void apply(ChunkAccess chunk, HydrologyManager.RiverCarving[] carvings, int[] originalY,
+    public static void apply(ChunkAccess chunk, HydrologyManager.RiverCarving[] carvings, int[] originalY, boolean[] repaired,
             BitSet[] protectedMap, int minH, int startX, int startZ, BiomeSource biomeSource, Climate.Sampler sampler) {
         if (!Config.RIVERBANK_PALETTES.get()) return;
+
+        final int[] waterAt = new int[256];
+        for (int i = 0; i < 256; i++) {
+            final HydrologyManager.RiverCarving c = carvings[i];
+            waterAt[i] = c == null ? Integer.MIN_VALUE
+                    : c.modifies && c.skinLevel != Integer.MIN_VALUE ? c.skinLevel
+                    : !c.modifies && repaired[i] ? c.waterLevel : Integer.MIN_VALUE;
+        }
 
         final int[] surface = new int[256];
         final boolean[] wet = new boolean[256];
@@ -54,11 +62,11 @@ public final class ShoreSkin {
         boolean any = false;
         for (int i = 0; i < 256; i++) {
             final HydrologyManager.RiverCarving c = carvings[i];
-            if (c == null || !c.modifies || c.skinLevel == Integer.MIN_VALUE) continue;
+            if (waterAt[i] == Integer.MIN_VALUE) continue;
             final int wx = startX + (i & 15), wz = startZ + (i >> 4);
             int top = Math.max(originalY[i], c.targetY) + 1;
             if (c.cavernRoofY > -999 && c.cavernRoofY < top) top = c.cavernRoofY;
-            final int bottom = Math.max(minH + 1, c.skinLevel - SCAN_BELOW_WATER);
+            final int bottom = Math.max(minH + 1, waterAt[i] - SCAN_BELOW_WATER);
             for (int y = top; y >= bottom; y--) {
                 if (solid(chunk.getBlockState(pos.set(wx, y, wz)))) {
                     surface[i] = y;
@@ -76,7 +84,7 @@ public final class ShoreSkin {
             if (sy == Integer.MIN_VALUE) continue;
             final HydrologyManager.RiverCarving c = carvings[i];
             final int x = i & 15, z = i >> 4, wx = startX + x, wz = startZ + z;
-            final int ws = c.skinLevel;
+            final int ws = waterAt[i];
 
             final boolean cut = sy < originalY[i];
             final boolean built = c.isWatershedWall && sy > originalY[i];
@@ -106,7 +114,7 @@ public final class ShoreSkin {
             } else if (wet[i]) {
                 if (ws - sy <= 1 && !c.pointBar) skin = pick(style, RiverbankPalette.SHORE, wx, wz);
                 if (skin == null) {
-                    final double run = energy(c, ws - sy, stepNear(i, ws, surface, wet, carvings)) * (c.pointBar ? 0.5 : 1.0);
+                    final double run = energy(c, ws - sy, stepNear(i, ws, surface, wet, waterAt)) * (c.pointBar ? 0.5 : 1.0);
                     skin = pick(style, sortDraw(wx, wz, style.patchSize) < run ? RiverbankPalette.RAPIDS : RiverbankPalette.SILT, wx, wz);
                 }
             } else {
@@ -185,16 +193,15 @@ public final class ShoreSkin {
         return depth <= 1 ? 0.35 : 0.08;
     }
 
-    private static boolean stepNear(int i, int level, int[] surface, boolean[] wet, HydrologyManager.RiverCarving[] carvings) {
+    private static boolean stepNear(int i, int level, int[] surface, boolean[] wet, int[] waterAt) {
         final int x = i & 15, z = i >> 4;
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
                 final int nx = x + dx, nz = z + dz;
                 if ((dx == 0 && dz == 0) || nx < 0 || nz < 0 || nx > 15 || nz > 15) continue;
                 final int ni = nx + nz * 16;
-                final HydrologyManager.RiverCarving n = carvings[ni];
-                if (n == null || !wet[ni] || surface[ni] == Integer.MIN_VALUE || n.skinLevel == Integer.MIN_VALUE) continue;
-                if (n.skinLevel != level) return true;
+                if (!wet[ni] || surface[ni] == Integer.MIN_VALUE || waterAt[ni] == Integer.MIN_VALUE) continue;
+                if (waterAt[ni] != level) return true;
             }
         }
         return false;
