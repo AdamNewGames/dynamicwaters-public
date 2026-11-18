@@ -44,8 +44,7 @@ public class FlowingFluidMixin {
                         cir.setReturnValue(Vec3.ZERO);
                         return;
                     }
-                    int direction = scanState.getValue(FlowOverrideBlock.FLOW_DIRECTION);
-                    cir.setReturnValue(FlowOverrideBlock.directionToVec3(direction));
+                    cir.setReturnValue(FlowOverrideBlock.flowOf(scanState));
                     return;
                 }
 
@@ -91,16 +90,25 @@ public class FlowingFluidMixin {
             }
         }
 
-        if (foundOcean && state.isSource()) {
+        final boolean plumes = com.AdamNew.dynamicwaters.Config.RIVER_PLUMES.get();
+        if (foundOcean && state.isSource() && !plumes) {
             cir.setReturnValue(Vec3.ZERO);
             return;
         }
 
         BlockPos globalPos = com.AdamNew.dynamicwaters.SableCompat.getGlobalBlockPos(level, pos);
         Vec3 riverFlow = HydrologyManager.getRiverFlow(globalPos.getX(), globalPos.getY(), globalPos.getZ(), (level instanceof net.minecraft.world.level.Level l) ? l : null);
+        if (foundOcean && state.isSource() && riverFlow.equals(Vec3.ZERO)) {
+            cir.setReturnValue(Vec3.ZERO);
+            return;
+        }
 
         if (!riverFlow.equals(Vec3.ZERO)) {
             boolean isPhysics = level instanceof net.minecraft.world.level.Level;
+            if (isPhysics && state.hasProperty(FlowingFluid.FALLING) && state.getValue(FlowingFluid.FALLING)
+                    && HydrologyManager.inWaterfall(level, pos)) {
+                riverFlow = new Vec3(riverFlow.x * HydrologyManager.FALL_ON, -1.0, riverFlow.z * HydrologyManager.FALL_ON);
+            }
             if (isPhysics) {
                 net.minecraft.world.entity.Entity ctxEntity = com.AdamNew.dynamicwaters.EntityPhysicsContext.get();
                 if (ctxEntity != null) {

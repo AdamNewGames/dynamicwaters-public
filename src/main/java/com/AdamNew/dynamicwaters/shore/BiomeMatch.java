@@ -181,6 +181,27 @@ public final class BiomeMatch {
         return out;
     }
 
+    static boolean modMissing(JsonObject o) {
+        return o.has("mod") && o.get("mod").isJsonPrimitive()
+                && !com.AdamNew.dynamicwaters.platform.Platform.isModLoaded(o.get("mod").getAsString());
+    }
+
+    static List<String> forInstalledMods(String[] names, Function<String, String> text) {
+        final List<String> out = new ArrayList<>();
+        for (String name : names) {
+            final String t = text.apply(name);
+            boolean missing = false;
+            if (t != null) {
+                try {
+                    missing = modMissing(com.google.gson.JsonParser.parseString(t).getAsJsonObject());
+                } catch (RuntimeException notJson) {
+                }
+            }
+            if (!missing) out.add(name);
+        }
+        return List.copyOf(out);
+    }
+
     static boolean flag(JsonObject o, String field, boolean def) {
         try {
             return o.has(field) ? o.get(field).getAsBoolean() : def;

@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:painted_mountains", "terralith:bryce_canyon"]
+  },
+  "rapids": ["minecraft:red_sand*2", "minecraft:orange_terracotta", "minecraft:red_terracotta", "minecraft:terracotta", "minecraft:gravel"],
+  "silt": ["minecraft:red_sand*4", "minecraft:orange_terracotta"],
+  "shore": ["minecraft:red_sand*2", "keep*2", "minecraft:orange_terracotta", "minecraft:white_terracotta"],
+  "bars": ["minecraft:red_sand*3", "minecraft:gravel"],
+  "flats": ["minecraft:red_sand*2", "keep", "minecraft:orange_terracotta"],
+  "patch_size": 5,
+  "shore_height": 1
+}

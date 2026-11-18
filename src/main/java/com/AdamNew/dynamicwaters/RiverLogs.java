@@ -163,7 +163,7 @@ public final class RiverLogs {
         return isGround(column) && column < y && column >= y - 2;
     }
 
-    private static BlockState wood(ChunkAccess chunk, ChunkPos pos, int y, BlockPos.MutableBlockPos at) {
+    static BlockState wood(ChunkAccess chunk, ChunkPos pos, int y, BlockPos.MutableBlockPos at) {
         for (int i = 0; i < 256; i++) {
             final int x = pos.getMinBlockX() + (i & 15), z = pos.getMinBlockZ() + (i >> 4);
             final BlockState state = chunk.getBlockState(at.set(x, chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z));

@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:amethyst_rainforest", "terralith:amethyst_canyon"]
+  },
+  "rapids": ["minecraft:calcite*2", "minecraft:smooth_basalt", "minecraft:gravel*2", "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:clay*3", "minecraft:sand*2", "minecraft:calcite"],
+  "shore": ["keep*4", "minecraft:calcite", "minecraft:moss_block", "minecraft:rooted_dirt"],
+  "bars": ["minecraft:sand*3", "minecraft:calcite"],
+  "flats": ["keep*3", "minecraft:calcite", "minecraft:moss_block"],
+  "patch_size": 5,
+  "shore_height": 1
+}

@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:prairie", "natures_spirit:prairie_river", "natures_spirit:heather_fields", "natures_spirit:lavender_fields", "natures_spirit:carnation_fields", "natures_spirit:marigold_meadows", "natures_spirit:blooming_highlands", "natures_spirit:oak_savanna"]
+  },
+  "rapids": ["minecraft:gravel*5", "minecraft:cobblestone", "minecraft:stone"],
+  "silt": ["minecraft:sand*3", "minecraft:clay*3", "minecraft:gravel*2"],
+  "shore": ["keep*7", "minecraft:gravel", "minecraft:clay"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand*2"],
+  "flats": ["keep*3", "minecraft:gravel", "minecraft:clay"],
+  "patch_size": 5,
+  "shore_height": 1
+}

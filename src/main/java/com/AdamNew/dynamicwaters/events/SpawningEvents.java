@@ -32,6 +32,11 @@ public class SpawningEvents {
     }
 
     public static void onChunkLoad(LevelAccessor level, net.minecraft.world.level.chunk.ChunkAccess chunk) {
+        if (level instanceof net.minecraft.server.level.ServerLevel server
+                && chunk instanceof net.minecraft.world.level.chunk.LevelChunk loaded) {
+            com.AdamNew.dynamicwaters.LivingCurrent.onChunkLoad(server, loaded);
+        }
+
         if (!level.isClientSide() && level instanceof net.minecraft.world.level.Level mcLevel
                 && HydrologyManager.riversIn(mcLevel)) {
             net.minecraft.world.level.chunk.ChunkGenerator generator = null;

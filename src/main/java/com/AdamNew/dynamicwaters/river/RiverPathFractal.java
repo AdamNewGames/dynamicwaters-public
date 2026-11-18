@@ -222,6 +222,64 @@ public class RiverPathFractal
         return min;
     }
 
+    /** How many segments either side of a point of the course its bend is measured over - see nearestBend. */
+    private static final int BEND_SPAN = 3;
+
+    /**
+     * {@link #nearestPoint}, and how the river bends there: {@code out} is the point's (x, y), then the bend, per
+     * block, as a vector toward the inside of the bend. The bend at each point of the course is the turn of the
+     * river's heading from BEND_SPAN segments before it to as many after, over the way between them; between two
+     * points it is eased from one to the other, so it changes smoothly along the river. (Measured on the nearest
+     * segment alone it stepped from one segment to the next: the current changed speed in bands across the river.)
+     * (0, 0) on a straight stretch.
+     */
+    public double nearestBend(double x, double y, double[] out)
+    {
+        double min = Double.MAX_VALUE;
+        int at = -1;
+        for (int i = 0; i < segments.length - 2; i += 2)
+        {
+            final double d = RiverMathUtils.distancePointToLineSq(segments[i], segments[i + 1], segments[i + 2], segments[i + 3], x, y);
+            if (d < min)
+            {
+                min = d;
+                at = i;
+            }
+        }
+        out[2] = 0.0;
+        out[3] = 0.0;
+        if (at < 0) return min;
+        final double ax = segments[at], ay = segments[at + 1];
+        final double dx = segments[at + 2] - ax, dy = segments[at + 3] - ay;
+        final double lenSq = dx * dx + dy * dy;
+        final double t = lenSq > 0 ? Math.max(0.0, Math.min(1.0, ((x - ax) * dx + (y - ay) * dy) / lenSq)) : 0.0;
+        out[0] = ax + t * dx;
+        out[1] = ay + t * dy;
+        final double[] from = new double[2], to = new double[2];
+        bendAtPoint(at, from);
+        bendAtPoint(at + 2, to);
+        out[2] = from[0] + t * (to[0] - from[0]);
+        out[3] = from[1] + t * (to[1] - from[1]);
+        return min;
+    }
+
+    /** See nearestBend: the bend at the course's point {@code j} (an index of its x), into {@code out}. */
+    private void bendAtPoint(int j, double[] out)
+    {
+        out[0] = 0.0;
+        out[1] = 0.0;
+        final int last = segments.length - 2;
+        final int b0 = Math.max(0, j - 2 * BEND_SPAN), a1 = Math.min(last, j + 2 * BEND_SPAN);
+        if (b0 >= j || a1 <= j) return;
+        final double bx = segments[j] - segments[b0], by = segments[j + 1] - segments[b0 + 1];
+        final double ax = segments[a1] - segments[j], ay = segments[a1 + 1] - segments[j + 1];
+        final double bl = Math.sqrt(bx * bx + by * by), al = Math.sqrt(ax * ax + ay * ay);
+        final double way = 0.5 * (bl + al);
+        if (bl < 1.0E-6 || al < 1.0E-6 || way < 1.0) return;
+        out[0] = (ax / al - bx / bl) / way;
+        out[1] = (ay / al - by / bl) / way;
+    }
+
     /**
      * {@link #nearestPoint}, and how that point lies along the river: {@code out} is its (x, y), the
      * unit direction of the river there, how far down the river it is and how long the river is,

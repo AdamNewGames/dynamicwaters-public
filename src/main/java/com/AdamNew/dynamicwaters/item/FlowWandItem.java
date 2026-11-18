@@ -43,7 +43,10 @@ public class FlowWandItem extends Item {
 
     private static final int ZONE_CLICK_COOLDOWN = 5;
 
+    public static final double SKY_LOOK = 0.7;
+
     private static final String ZONE_MODE = "ZoneMode";
+    private static final String SPEED = "Speed";
     private static final String CORNER_A = "CornerA";
     private static final String CORNER_B = "CornerB";
     private static final String CORNER_DIM = "CornerDim";
@@ -77,15 +80,17 @@ public class FlowWandItem extends Item {
         boolean disableFlow = player.isShiftKeyDown();
 
         if (disableFlow) {
-            applyOverride(level, waterPos, -1, false);
+            applyOverride(level, waterPos, -1, false, FlowOverrideBlock.DEFAULT_SPEED);
             player.sendSystemMessage(prefixed(Component.translatable("message.dynamicwaters.flow_wand.disabled"),
                     ChatFormatting.GOLD));
         } else {
             Vec3 lookVec = player.getLookAngle();
             int direction = FlowOverrideBlock.vec3ToDirection(lookVec.x, lookVec.z);
-            applyOverride(level, waterPos, direction, true);
+            final int speed = speedStep(context.getItemInHand());
+            applyOverride(level, waterPos, direction, true, speed);
             player.sendSystemMessage(prefixed(Component.translatable("message.dynamicwaters.flow_wand.set",
-                    FlowZones.directionName(direction)), ChatFormatting.AQUA));
+                    FlowZones.directionName(direction)).append(" ×" + FlowOverrideBlock.speedText(FlowOverrideBlock.pace(speed))),
+                    ChatFormatting.AQUA));
         }
 
         level.playSound(null, waterPos, SoundEvents.WATER_AMBIENT, SoundSource.BLOCKS, 0.5f, 1.2f);
@@ -95,6 +100,18 @@ public class FlowWandItem extends Item {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         final ItemStack stack = player.getItemInHand(hand);
+        if (!player.isShiftKeyDown() && player.getLookAngle().y > SKY_LOOK
+                && target(level, player).getType() == HitResult.Type.MISS) {
+            if (!level.isClientSide()) {
+                final int step = (speedStep(stack) + 1) % FlowOverrideBlock.SPEEDS.length;
+                update(stack, tag -> tag.putInt(SPEED, step));
+                player.displayClientMessage(Component.translatable("message.dynamicwaters.flow_wand.speed",
+                        FlowOverrideBlock.speedText(FlowOverrideBlock.pace(step))), true);
+                chime(player, 0.8f + 0.12f * step);
+                player.getCooldowns().addCooldown(this, ZONE_CLICK_COOLDOWN);
+            }
+            return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
+        }
         if (!isZoneMode(stack)) {
             if (!player.isShiftKeyDown() || target(level, player).getType() != HitResult.Type.MISS)
                 return InteractionResultHolder.pass(stack);
@@ -128,7 +145,7 @@ public class FlowWandItem extends Item {
                 }
                 direction = FlowOverrideBlock.vec3ToDirection(look.x, look.z);
             }
-            final FlowZones.Zone zone = FlowZones.add(level, a, b, direction);
+            final FlowZones.Zone zone = FlowZones.add(level, a, b, direction, FlowOverrideBlock.pace(speedStep(stack)));
             if (zone == null) {
                 player.displayClientMessage(Component.translatable("message.dynamicwaters.flow_zone.too_many",
                         FlowZones.MAX_ZONES), true);
@@ -136,7 +153,8 @@ public class FlowWandItem extends Item {
             }
             clearCorners(stack);
             player.sendSystemMessage(prefixed(Component.translatable("message.dynamicwaters.flow_zone.created",
-                    zone.id(), zone.sizeX(), zone.sizeZ(), FlowZones.describe(zone.direction())), ChatFormatting.AQUA));
+                    zone.id(), zone.sizeX(), zone.sizeZ(), FlowZones.describe(zone.direction(), zone.speed())),
+                    ChatFormatting.AQUA));
             level.playSound(null, player.blockPosition(), SoundEvents.WATER_AMBIENT, SoundSource.BLOCKS, 0.5f, 1.2f);
             return;
         }
@@ -193,7 +211,7 @@ public class FlowWandItem extends Item {
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, player));
     }
 
-    private void applyOverride(Level level, BlockPos clickedWaterPos, int direction, boolean enabled) {
+    private void applyOverride(Level level, BlockPos clickedWaterPos, int direction, boolean enabled, int speed) {
         BlockPos surfacePos = clickedWaterPos;
         for (int i = 1; i <= SCAN_RADIUS * 2; i++) {
             BlockPos candidate = clickedWaterPos.above(i);
@@ -209,7 +227,8 @@ public class FlowWandItem extends Item {
         if (enabled) {
             overrideState = ModBlocks.FLOW_OVERRIDE.get().defaultBlockState()
                     .setValue(FlowOverrideBlock.FLOW_DIRECTION, direction)
-                    .setValue(FlowOverrideBlock.FLOW_ENABLED, true);
+                    .setValue(FlowOverrideBlock.FLOW_ENABLED, true)
+                    .setValue(FlowOverrideBlock.FLOW_SPEED, speed);
         } else {
             overrideState = ModBlocks.FLOW_OVERRIDE.get().defaultBlockState()
                     .setValue(FlowOverrideBlock.FLOW_DIRECTION, 0)
@@ -265,6 +284,12 @@ public class FlowWandItem extends Item {
 
     public static boolean isZoneMode(ItemStack stack) {
         return data(stack).contains(ZONE_MODE);
+    }
+
+    public static int speedStep(ItemStack stack) {
+        final CompoundTag tag = data(stack);
+        final int step = tag.contains(SPEED) ? tag.getInt(SPEED) : FlowOverrideBlock.DEFAULT_SPEED;
+        return step >= 0 && step < FlowOverrideBlock.SPEEDS.length ? step : FlowOverrideBlock.DEFAULT_SPEED;
     }
 
     private static void setZoneMode(ItemStack stack, boolean zone) {
@@ -328,6 +353,7 @@ public class FlowWandItem extends Item {
         return super.getName(stack).copy().append(Component.literal(" [")
                 .append(Component.translatable(isZoneMode(stack) ? "item.dynamicwaters.flow_wand.mode.zone"
                         : "item.dynamicwaters.flow_wand.mode.column"))
+                .append(" ×" + FlowOverrideBlock.speedText(FlowOverrideBlock.pace(speedStep(stack))))
                 .append("]").withStyle(ChatFormatting.AQUA));
     }
 
@@ -356,5 +382,7 @@ public class FlowWandItem extends Item {
                 : new String[] {"tooltip1", "tooltip2", "to_zone"};
         for (String line : lines)
             tooltip.add(Component.translatable("item.dynamicwaters.flow_wand." + line).withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable("item.dynamicwaters.flow_wand.speed",
+                FlowOverrideBlock.speedText(FlowOverrideBlock.pace(speedStep(stack)))).withStyle(ChatFormatting.GRAY));
     }
 }

@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:grassy_beach", "regions_unexplored:gravel_beach"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:sand*2"],
+  "silt": ["minecraft:sand*3", "minecraft:gravel"],
+  "shore": ["keep*3", "minecraft:gravel*2"],
+  "bars": ["minecraft:sand*2", "minecraft:gravel*2"],
+  "flats": ["keep*3", "minecraft:sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

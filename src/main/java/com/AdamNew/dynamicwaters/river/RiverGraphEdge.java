@@ -60,11 +60,28 @@ public final class RiverGraphEdge
 
     /**
      * How far (in blocks) from an edge's midpoint it could possibly still affect terrain: half the
-     * step, the meanders (RiverShaper.MAX_SWING), and the widest river's banks or a gorge's walls.
+     * step, the meanders (RiverShaper.MAX_SWING), and the widest river's banks or a gorge's walls -
+     * BANK_REACH of them, wider in a world of wider rivers (affectingDistance).
      */
     static final int MAX_AFFECTING_BLOCK_DISTANCE = 1 + Mth.ceil(1.5f * RiverNetworkBuilder.RIVER_STEP_LENGTH) + 60;
+    private static final int BANK_REACH = 60;
+
+    /**
+     * MAX_AFFECTING_BLOCK_DISTANCE in this world: its banks as wide as its rivers (HydrologyManager.riverScale), and
+     * VALLEY_REACH_MORE further where they are cut as valleys (HydrologyManager.valleyLowland).
+     */
+    static int affectingDistance() {
+        final double wide = Math.max(1.0, com.AdamNew.dynamicwaters.HydrologyManager.riverScale().lowlandWidth());
+        return MAX_AFFECTING_BLOCK_DISTANCE + Mth.ceil(BANK_REACH * (wide - 1.0))
+                + (com.AdamNew.dynamicwaters.HydrologyManager.valleyLowland() ? VALLEY_REACH_MORE : 0);
+    }
+
+    /** How much further a valley's slopes reach than a gorge's walls: HydrologyManager.VALLEY_REACH over GORGE_REACH. */
+    private static final int VALLEY_REACH_MORE = 110;
 
     public int width = MIN_WIDTH;
+    /** The cut along the course, sampled: see HydrologyManager.CUT_ALONG. Worked out on first asking. */
+    public volatile Object cutAlong;
     /**
      * One of a delta's channels - see RiverShaper. Its water is {@link #deltaWaterRadius} of its
      * width, not a river's: a delta's channels are narrow, down to creeks three blocks across. An
@@ -104,10 +121,10 @@ public final class RiverGraphEdge
         final int centerX = (int) Math.round(0.5 * (edge.source().x() + edge.drain().x()));
         final int centerZ = (int) Math.round(0.5 * (edge.source().y() + edge.drain().y()));
 
-        this.minPartX = RiverPartition.blockToCell(centerX - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.minPartZ = RiverPartition.blockToCell(centerZ - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartX = RiverPartition.blockToCell(centerX + MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartZ = RiverPartition.blockToCell(centerZ + MAX_AFFECTING_BLOCK_DISTANCE);
+        this.minPartX = RiverPartition.blockToCell(centerX - affectingDistance());
+        this.minPartZ = RiverPartition.blockToCell(centerZ - affectingDistance());
+        this.maxPartX = RiverPartition.blockToCell(centerX + affectingDistance());
+        this.maxPartZ = RiverPartition.blockToCell(centerZ + affectingDistance());
 
         this.sourceEdge = sourceEdge;
         this.drainEdge = drainEdge;
@@ -133,10 +150,10 @@ public final class RiverGraphEdge
         final int mid = (points.length / 4) * 2;
         final int centerX = (int) Math.round(points[mid]);
         final int centerZ = (int) Math.round(points[mid + 1]);
-        this.minPartX = RiverPartition.blockToCell(centerX - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.minPartZ = RiverPartition.blockToCell(centerZ - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartX = RiverPartition.blockToCell(centerX + MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartZ = RiverPartition.blockToCell(centerZ + MAX_AFFECTING_BLOCK_DISTANCE);
+        this.minPartX = RiverPartition.blockToCell(centerX - affectingDistance());
+        this.minPartZ = RiverPartition.blockToCell(centerZ - affectingDistance());
+        this.maxPartX = RiverPartition.blockToCell(centerX + affectingDistance());
+        this.maxPartZ = RiverPartition.blockToCell(centerZ + affectingDistance());
         this.sourceEdge = true;
         this.drainEdge = null;
     }
@@ -168,10 +185,10 @@ public final class RiverGraphEdge
         final int centerX = (int) Math.round(0.5 * (sourceX + drainX));
         final int centerZ = (int) Math.round(0.5 * (sourceZ + drainZ));
 
-        this.minPartX = RiverPartition.blockToCell(centerX - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.minPartZ = RiverPartition.blockToCell(centerZ - MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartX = RiverPartition.blockToCell(centerX + MAX_AFFECTING_BLOCK_DISTANCE);
-        this.maxPartZ = RiverPartition.blockToCell(centerZ + MAX_AFFECTING_BLOCK_DISTANCE);
+        this.minPartX = RiverPartition.blockToCell(centerX - affectingDistance());
+        this.minPartZ = RiverPartition.blockToCell(centerZ - affectingDistance());
+        this.maxPartX = RiverPartition.blockToCell(centerX + affectingDistance());
+        this.maxPartZ = RiverPartition.blockToCell(centerZ + affectingDistance());
     }
 
     public RiverInstance.Vertex source()

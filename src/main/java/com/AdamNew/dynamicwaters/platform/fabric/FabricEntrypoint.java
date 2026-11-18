@@ -71,6 +71,8 @@ public class FabricEntrypoint implements ModInitializer {
 		PayloadTypeRegistry.playS2C().register(SyncVanillaFlowPacket.TYPE, SyncVanillaFlowPacket.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(SyncMainRiversPacket.TYPE, SyncMainRiversPacket.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(SyncFlowZonesPacket.TYPE, SyncFlowZonesPacket.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(com.AdamNew.dynamicwaters.network.SyncLivingCurrentPacket.TYPE,
+				com.AdamNew.dynamicwaters.network.SyncLivingCurrentPacket.STREAM_CODEC);
 
 		FabricLoader.getInstance().getModContainer(DynamicWaters.MODID).ifPresent(container -> {
 			for (DynamicWaters.BuiltInPack pack : DynamicWaters.builtInPacks()) {
@@ -94,10 +96,14 @@ public class FabricEntrypoint implements ModInitializer {
 			DynamicWaters.onLevelLoad(level);
 			FlowZones.onLevelLoad(level);
 		});
-		ServerWorldEvents.UNLOAD.register((server, level) -> FlowZones.onLevelUnload(level));
+		ServerWorldEvents.UNLOAD.register((server, level) -> {
+			FlowZones.onLevelUnload(level);
+			com.AdamNew.dynamicwaters.LivingCurrent.onLevelUnload(level);
+		});
 		ServerTickEvents.END_WORLD_TICK.register(level -> {
 			SableCompat.tickPhysicsShips(level);
 			IceFloeSpawner.onLevelTick(level);
+			com.AdamNew.dynamicwaters.LivingCurrent.tick(level);
 		});
 		ServerChunkEvents.CHUNK_LOAD.register(SpawningEvents::onChunkLoad);
 		CommandRegistrationCallback.EVENT.register((dispatcher, context, selection) -> DynamicWaters.onRegisterCommands(dispatcher));

@@ -18,6 +18,48 @@ public class WatershedPath {
 
     public static final double FALL_FACE_T = 0.8;
 
+    public static final double FALL_FACE_REACH = 3.0;
+
+    private int nearFace(double x, double z, int lo, int hi, double reach, double[] side) {
+        int best = -1;
+        double bestSq = reach * reach;
+        for (int f = Math.max(0, lo), end = Math.min(validNodeCount - 2, hi); f <= end; f++) {
+            if (!isFall(segmentsY, f)) continue;
+            final double dx = segmentsX[f + 1] - segmentsX[f], dz = segmentsZ[f + 1] - segmentsZ[f];
+            final double len = Math.sqrt(dx * dx + dz * dz);
+            if (len == 0.0) continue;
+            final double ox = x - (segmentsX[f] + FALL_FACE_T * dx), oz = z - (segmentsZ[f] + FALL_FACE_T * dz);
+            final double dSq = ox * ox + oz * oz;
+            if (dSq >= bestSq) continue;
+            bestSq = dSq;
+            best = f;
+            side[0] = (ox * dx + oz * dz) / len;
+        }
+        return best;
+    }
+
+    public RiverNodeData belowFace(double x, double z, double mx, double mz) {
+        int k = -1;
+        double kSq = Double.MAX_VALUE;
+        for (int i = 0; i < validNodeCount; i++) {
+            final double dx = segmentsX[i] - mx, dz = segmentsZ[i] - mz;
+            final double dSq = dx * dx + dz * dz;
+            if (dSq < kSq) {
+                kSq = dSq;
+                k = i;
+            }
+        }
+        final int f = k - 1;
+        if (f < 0 || f > validNodeCount - 2) return null;
+        final boolean fall = isFall(segmentsY, f);
+        final double t = fall ? FALL_FACE_T : 1.0;
+        final double dx = segmentsX[f + 1] - segmentsX[f], dz = segmentsZ[f + 1] - segmentsZ[f];
+        final double ox = x - (segmentsX[f] + t * dx), oz = z - (segmentsZ[f] + t * dz);
+        if (ox * dx + oz * dz > 0.0) return null;
+        final RiverNodeData own = getClosestNodeData(x, z);
+        return fall && own.y > segmentsY[f] ? own.atLevel(segmentsY[f]) : own;
+    }
+
     public static final double FALL_BANK_BLOCKS = 4.0;
     public static final double FALL_BANK_MAX = 10.0;
 
@@ -56,6 +98,10 @@ public class WatershedPath {
     volatile byte leftDry;
 
     volatile byte deltaFed;
+
+    volatile byte mouthFall;
+
+    volatile WatershedPath mouthInto;
 
     public WatershedPath(int nodeCount, int validNodeCount, boolean hitMainRiver, double[] segmentsX,
             double[] segmentsZ, int[] segmentsY, int[] segmentsTerrainY, double[] segmentWidths) {
@@ -211,6 +257,22 @@ public class WatershedPath {
             projWidth = segmentWidths[i] + t * (segmentWidths[i + 1] - segmentWidths[i]);
         }
 
+        {
+            final double[] side = new double[1];
+            final int f = nearFace(x, z, bestIdx - 2, bestIdx + 2, projWidth + FALL_FACE_REACH, side);
+            if (f >= 0) {
+                if (side[0] > 0.0) {
+                    if (projY < segmentsY[f + 1]) {
+                        projY = segmentsY[f + 1];
+                        projTerrainY = segmentsTerrainY[f + 1];
+                    }
+                } else if (projY > segmentsY[f]) {
+                    projY = segmentsY[f];
+                    projTerrainY = segmentsTerrainY[f];
+                }
+            }
+        }
+
         Vec3 flowDir;
         if (bestIdx > 0) {
             double fdx = segmentsX[bestIdx - 1] - segmentsX[bestIdx];
@@ -243,9 +305,31 @@ public class WatershedPath {
         final boolean beyondEnd = lo == 0 && bestIdx == 0 && !bestIsPoint && bestRawT < 0.0
                 || hi == validNodeCount - 1 && (bestIsPoint || bestIdx == hi - 1 && bestRawT > 1.0);
         final double dist = Math.sqrt(minDistSq);
-        return new RiverNodeData(
+        final double along = bestIdx + (bestIsPoint || bestIdx >= searchCount - 1 ? 0.0 : bestT);
+        final RiverNodeData data = new RiverNodeData(
                 segmentsX[bestIdx], segmentsZ[bestIdx], (int) Math.round(projY), (int) Math.round(projTerrainY),
-                projWidth, dist, flowDir, bestIdx, dist * sideSign, projCurv, projSlope, bankFloor, beyondEnd);
+                projWidth, dist, flowDir, bestIdx, dist * sideSign, projCurv, projSlope, bankFloor, beyondEnd,
+                smoothedAlong(curvature, along, false), smoothedAlong(slope, along, true));
+        data.along = along;
+        return data;
+    }
+
+    private static final double PACE_SMOOTH_NODES = 3.5;
+
+    private double smoothedAlong(double[] values, double along, boolean skipFalls) {
+        final int n = Math.min(values.length, validNodeCount);
+        if (n <= 0) return 0.0;
+        final int lo = Math.max(0, (int) Math.floor(along - PACE_SMOOTH_NODES));
+        final int hi = Math.min(n - 1, (int) Math.ceil(along + PACE_SMOOTH_NODES));
+        double sum = 0.0, weight = 0.0;
+        for (int k = lo; k <= hi; k++) {
+            if (skipFalls && (k + 1 < n && isFall(segmentsY, k) || k > 0 && isFall(segmentsY, k - 1))) continue;
+            final double w = Math.max(0.0, 1.0 - Math.abs(k - along) / PACE_SMOOTH_NODES);
+            sum += w * values[k];
+            weight += w;
+        }
+        if (weight > 0.0) return sum / weight;
+        return skipFalls ? 0.0 : values[Mth.clamp((int) Math.round(along), 0, n - 1)];
     }
 
     public static class RiverNodeData {
@@ -267,6 +351,11 @@ public class WatershedPath {
 
         public final boolean beyondEnd;
 
+        public final double paceCurvature;
+        public final double paceSlope;
+
+        public double along;
+
         public RiverNodeData(double x, double z, int y, int terrainY, double width, double distance, Vec3 flowDir,
                 int nodeIndex) {
             this(x, z, y, terrainY, width, distance, flowDir, nodeIndex, distance, 0.0, 0.0, Integer.MIN_VALUE, false);
@@ -274,6 +363,16 @@ public class WatershedPath {
 
         public RiverNodeData(double x, double z, int y, int terrainY, double width, double distance, Vec3 flowDir,
                 int nodeIndex, double lateral, double curvature, double slope, int bankFloor, boolean beyondEnd) {
+            this(x, z, y, terrainY, width, distance, flowDir, nodeIndex, lateral, curvature, slope, bankFloor, beyondEnd,
+                    curvature, slope);
+        }
+
+        public RiverNodeData(double x, double z, int y, int terrainY, double width, double distance, Vec3 flowDir,
+                int nodeIndex, double lateral, double curvature, double slope, int bankFloor, boolean beyondEnd,
+                double paceCurvature, double paceSlope) {
+            this.paceCurvature = paceCurvature;
+            this.paceSlope = paceSlope;
+            this.along = nodeIndex;
             this.x = x;
             this.z = z;
             this.y = y;
@@ -290,8 +389,10 @@ public class WatershedPath {
         }
 
         public RiverNodeData atLevel(int y) {
-            return new RiverNodeData(x, z, y, terrainY, width, distance, flowDir, nodeIndex, lateral, curvature, slope,
-                    bankFloor, beyondEnd);
+            final RiverNodeData data = new RiverNodeData(x, z, y, terrainY, width, distance, flowDir, nodeIndex, lateral,
+                    curvature, slope, bankFloor, beyondEnd, paceCurvature, paceSlope);
+            data.along = along;
+            return data;
         }
     }
 }

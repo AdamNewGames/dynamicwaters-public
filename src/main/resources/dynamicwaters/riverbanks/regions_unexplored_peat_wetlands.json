@@ -1,0 +1,14 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:bayou", "regions_unexplored:old_growth_bayou", "regions_unexplored:fen",
+      "regions_unexplored:marsh"]
+  },
+  "rapids": ["minecraft:gravel*3", "regions_unexplored:peat_coarse_dirt*2", "minecraft:mossy_cobblestone"],
+  "silt": ["regions_unexplored:peat_mud*4", "minecraft:mud*2", "minecraft:clay"],
+  "shore": ["keep*3", "regions_unexplored:peat_mud*2", "regions_unexplored:peat_dirt*2", "minecraft:moss_block"],
+  "bars": ["regions_unexplored:peat_mud*3", "minecraft:mud*2"],
+  "flats": ["keep*2", "regions_unexplored:peat_mud*2", "minecraft:mud"],
+  "patch_size": 5,
+  "shore_height": 1
+}

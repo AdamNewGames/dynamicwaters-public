@@ -1,0 +1,14 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:frozen_pine_taiga", "regions_unexplored:frozen_tundra", "regions_unexplored:tundra",
+      "regions_unexplored:icy_heights", "regions_unexplored:spires", "regions_unexplored:cold_deciduous_forest"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:stone*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:gravel*3", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:gravel*2", "minecraft:snow_block"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

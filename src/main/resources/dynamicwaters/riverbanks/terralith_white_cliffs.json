@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:white_cliffs"]
+  },
+  "rapids": ["minecraft:calcite*3", "minecraft:gravel*2", "minecraft:diorite"],
+  "silt": ["minecraft:calcite*2", "minecraft:sand*2", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:calcite*2", "minecraft:gravel"],
+  "bars": ["minecraft:sand*2", "minecraft:calcite"],
+  "flats": ["keep*3", "minecraft:calcite"],
+  "patch_size": 5,
+  "shore_height": 1
+}

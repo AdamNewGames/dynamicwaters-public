@@ -11,8 +11,11 @@ import net.minecraft.util.Mth;
 public class HydrologyManager {
     private static net.minecraft.world.level.chunk.ChunkGenerator globalGenerator;
     private static net.minecraft.world.level.levelgen.RandomState globalRandomState;
-    private static final net.minecraft.world.level.LevelHeightAccessor dummyAccessor = net.minecraft.world.level.LevelHeightAccessor
+
+    private static volatile net.minecraft.world.level.LevelHeightAccessor dummyAccessor = net.minecraft.world.level.LevelHeightAccessor
             .create(-64, 384);
+
+    private static volatile int skyY = 320;
 
     private static final ThreadLocal<Boolean> IS_GENERATING_RIVERS = ThreadLocal.withInitial(() -> false);
 
@@ -36,6 +39,15 @@ public class HydrologyManager {
             net.minecraft.world.level.levelgen.RandomState rs) {
         globalGenerator = gen;
         globalRandomState = rs;
+        if (gen instanceof net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator noise) {
+            final net.minecraft.world.level.levelgen.NoiseSettings settings = noise.generatorSettings().value().noiseSettings();
+            dummyAccessor = net.minecraft.world.level.LevelHeightAccessor.create(settings.minY(), settings.height());
+            skyY = settings.minY() + settings.height();
+        }
+    }
+
+    public static int skyY() {
+        return skyY;
     }
 
     public static boolean riversIn(net.minecraft.world.level.Level level) {
@@ -49,10 +61,19 @@ public class HydrologyManager {
         drawnLevelRivers = rivers;
     }
 
+    private static volatile java.util.function.Supplier<net.minecraft.world.level.Level> drawnLevel = () -> null;
+
+    public static void setDrawnLevel(java.util.function.Supplier<net.minecraft.world.level.Level> level) {
+        drawnLevel = level;
+    }
+
     public static void resetForServer() {
         globalGenerator = null;
         globalRandomState = null;
+        dummyAccessor = net.minecraft.world.level.LevelHeightAccessor.create(-64, 384);
+        skyY = 320;
         riverBiomeHolder = null;
+        RIVER_SCALE = WorldShape.Scale.DEFAULT;
         clearCaches();
         MainRivers.clearCaches();
     }
@@ -90,7 +111,7 @@ public class HydrologyManager {
     private static final double NORMAL_RIVER_DEPTH = 7.0;
 
     public static double normalRiverWaterRadius(double networkWidth) {
-        return networkWidth * NORMAL_RIVER_WIDTH_SCALE + NORMAL_RIVER_WIDTH_EXTRA;
+        return (networkWidth * NORMAL_RIVER_WIDTH_SCALE + NORMAL_RIVER_WIDTH_EXTRA) * RIVER_SCALE.lowlandWidth();
     }
 
     public static double normalRiverSkinRadius(double networkWidth) {
@@ -133,6 +154,10 @@ public class HydrologyManager {
     private static final double LEVEE_CREST = 2.0;
     private static final double LEVEE_SHOULDER = 3.0;
 
+    private static final double OPEN_BANK_MEET_MARGIN = 2.0;
+
+    private static final double OPEN_BANK_STREAM_CLEAR = 6.0;
+
     private static double bankMeet(double halfWidth) {
         return Math.max(BANK_MEET_MIN, BANK_MEET_PER_WIDTH * halfWidth);
     }
@@ -149,6 +174,11 @@ public class HydrologyManager {
 
     public static boolean holdsWater(RiverCarving c) {
         return c != null && c.modifies && !c.isWatershedWall && c.waterLevel > c.targetY;
+    }
+
+    public static boolean ownWater(RiverCarving c) {
+        return c != null && (c.isLake || c.isMainRiverWater || c.oxbow || c.deltaWater
+                || c.distanceFromCenter < Double.MAX_VALUE);
     }
 
     public static net.minecraft.world.level.block.state.BlockState holdFill(net.minecraft.world.level.BlockGetter getter,
@@ -239,7 +269,7 @@ public class HydrologyManager {
                         final RiverCarving n = calculateRiverCarving(nx, nz,
                                 generator.getBaseHeight(nx, nz, net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG, level, random) - 1,
                                 sea, generator, level, random);
-                        if (holdsWater(n) && y > n.waterLevel) continue;
+                        if (holdsWater(n) && ownWater(n) && y > n.waterLevel) continue;
                         level.setBlock(next, holdFill(level, next), 2);
                     }
                 }
@@ -276,10 +306,67 @@ public class HydrologyManager {
     }
 
     private static int channelBowl(WatershedPath.RiverNodeData data, double chanW) {
-        final int centerDepth = Mth.clamp((int) Math.round(STREAM_DEPTH_RATIO * chanW), 1, MAX_BOWL);
+        final int centerDepth = Mth.clamp((int) Math.round(STREAM_DEPTH_RATIO * chanW * RIVER_SCALE.mountainDepth()), 1, maxBowl());
         final double lat = Mth.clamp(data.lateral / chanW, -1.0, 1.0);
         final double skew = ChannelForm.bendSkew(data.curvature, chanW);
-        return Math.min(MAX_BOWL, (int) Math.round(centerDepth * ChannelForm.bedDepth(lat, skew)));
+        return Math.min(maxBowl(), (int) Math.round(centerDepth * ChannelForm.bedDepth(lat, skew)));
+    }
+
+    private static final double FALL_LIP_RUN = 5.0, FALL_LIP_DEEPEN = 0.8;
+    private static final int FALL_LIP_DEPTH = 1;
+
+    private static double fallLipAhead(WatershedPath path, WatershedPath.RiverNodeData data, double x, double z) {
+        final double along = data.along;
+        final int[] ys = path.segmentsY;
+        final int start = Math.min((int) Math.floor(along), path.validNodeCount - 2);
+        final int span = (int) Math.ceil(FALL_LIP_RUN / WatershedPath.NODE_SPACING) + 1;
+        for (int f = start; f >= Math.max(0, start - span); f--) {
+            if (!WatershedPath.isFall(ys, f)) continue;
+            final double face = f + WatershedPath.FALL_FACE_T;
+            if (along < face) continue;
+            final double t = WatershedPath.FALL_FACE_T;
+            final double ux = path.segmentsX[f + 1] - path.segmentsX[f], uz = path.segmentsZ[f + 1] - path.segmentsZ[f];
+            final double len = Math.hypot(ux, uz);
+            if (len < 1.0E-6) return 0.0;
+            final double fx = path.segmentsX[f] + t * ux, fz = path.segmentsZ[f] + t * uz;
+            return Math.max(0.0, ((x - fx) * ux + (z - fz) * uz) / len);
+        }
+        return Double.MAX_VALUE;
+    }
+
+    private static boolean mouthFalls(WatershedPath path, int seaLevel,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.LevelHeightAccessor level,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        byte known = path.mouthFall;
+        if (known == 0) {
+            int below;
+            if (path.hitMainRiver) {
+                below = seaLevel - 1;
+            } else {
+                final WatershedPath down = generator == null ? null : downstreamOf(path, generator, level, randomState);
+                below = down == null ? Integer.MAX_VALUE : down.getClosestNodeData(path.segmentsX[0], path.segmentsZ[0]).y;
+                path.mouthInto = down;
+            }
+            known = path.segmentsY[0] - below >= WatershedPath.SHEER_DROP ? (byte) 2 : (byte) 1;
+            path.mouthFall = known;
+        }
+        return known == 2;
+    }
+
+    private static final double OUTLET_EASE_RUN = 24.0;
+
+    private static int outletEased(WatershedPath path, WatershedPath.RiverNodeData data, int level) {
+        final double distToOutlet = data.nodeIndex * WatershedPath.NODE_SPACING;
+        final int outletY = path.segmentsY[0];
+        if (distToOutlet >= OUTLET_EASE_RUN || outletY >= level || data.beyondEnd && data.nodeIndex > 0) return level;
+        final double run = Math.min(OUTLET_EASE_RUN, (path.validNodeCount - 2) * WatershedPath.NODE_SPACING);
+        final double blend = run > 0.0 ? Math.min(1.0, distToOutlet / run) : 1.0;
+        return (int) Math.floor(outletY + blend * (level - outletY));
+    }
+
+    private static int maxBowl() {
+        return (int) Math.round(MAX_BOWL * RIVER_SCALE.mountainDepth());
     }
 
     private static boolean capYields(WatershedPath self, WatershedPath.RiverNodeData own, double x, double z,
@@ -303,13 +390,15 @@ public class HydrologyManager {
     }
 
     private static boolean capGoesOn(WatershedPath self, double x, double z, int colX, int colZ, int homeRx, int homeRz,
-            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            int waterOver, net.minecraft.world.level.chunk.ChunkGenerator generator,
             net.minecraft.world.level.LevelHeightAccessor level,
             net.minecraft.world.level.levelgen.RandomState randomState) {
         if (self.validNodeCount < 2) return false;
         final int last = self.validNodeCount - 1;
         final boolean atMouth = Math.hypot(x - self.segmentsX[0], z - self.segmentsZ[0])
                 <= Math.hypot(x - self.segmentsX[last], z - self.segmentsZ[last]);
+        final boolean water = waterOver != Integer.MIN_VALUE;
+        if (water && atMouth) return false;
         final double ex = atMouth ? self.segmentsX[0] : self.segmentsX[last];
         final double ez = atMouth ? self.segmentsZ[0] : self.segmentsZ[last];
 
@@ -332,7 +421,8 @@ public class HydrologyManager {
                     final WatershedPath.RiverNodeData d = other.getClosestNodeData(x, z);
                     if (d.beyondEnd) continue;
                     final double w = channelFullWidth(d, x, z);
-                    onIt = d.distance < w + Math.max(BANK_ZONE_MIN, BANK_ZONE_PER_WIDTH * w);
+                    onIt = water ? d.distance < w && d.y >= waterOver
+                            : d.distance < w + Math.max(BANK_ZONE_MIN, BANK_ZONE_PER_WIDTH * w);
                 }
             }
         }
@@ -371,9 +461,12 @@ public class HydrologyManager {
         return side < r.width + RAVINE_SIDE;
     }
 
+    private static final double LAKE_HOLE_INSET = 4.0;
+
     private static int lakeDepth(double shoreDistance) {
         final double s = 1.0 - Math.min(1.0, shoreDistance / WatershedLake.SHORE_REACH);
-        return (int) Math.round(LAKE_DEPTH - (LAKE_DEPTH - 1) * s * s);
+        final double deep = LAKE_DEPTH * Math.max(1.0, Math.max(RIVER_SCALE.lowlandDepth(), RIVER_SCALE.mountainDepth()));
+        return (int) Math.round(deep - (deep - 1) * s * s);
     }
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, java.util.concurrent.CompletableFuture<Void>> TILE_BUILDS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -763,6 +856,88 @@ public class HydrologyManager {
         return filled;
     }
 
+    private static final int LAKE_POND_REACH = LakeHollows.LAKE_HOLLOW_REACH + 1;
+
+    private static final double RIVER_POND_REACH = 32.0;
+
+    private static final int POND_HEIGHT = 16;
+
+    private static final int POND_TOP_SCAN = 32;
+
+    public static void lowerPonds(net.minecraft.world.level.chunk.ChunkAccess chunk, int startX, int startZ,
+            int[] ownWater, java.util.BitSet[] protectedBlocks, int minH,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        final net.minecraft.core.BlockPos.MutableBlockPos pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+        final int[] top = new int[256];
+        boolean any = false;
+        for (int i = 0; i < 256; i++) {
+            top[i] = Integer.MIN_VALUE;
+            final int x = startX + (i & 15), z = startZ + (i >> 4);
+            final int h = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG, i & 15, i >> 4);
+            for (int y = h; y > h - POND_TOP_SCAN && y > ownWater[i]; y--) {
+                final net.minecraft.world.level.block.state.BlockState s = chunk.getBlockState(pos.set(x, y, z));
+                if (s.isAir()) continue;
+                if (s.is(net.minecraft.world.level.block.Blocks.WATER) && y > WORLD_SEA_LEVEL - 1) {
+                    top[i] = y;
+                    any = true;
+                }
+                break;
+            }
+        }
+        if (!any) return;
+
+        final double lakeMargin = LAKE_POND_REACH * (double) CoarseHeightField.CELL_SIZE;
+        final java.util.List<WatershedLake> lakes = new java.util.ArrayList<>();
+        final int mrx = Math.floorDiv(startX + 8, WATERSHED_REGION_SIZE), mrz = Math.floorDiv(startZ + 8, WATERSHED_REGION_SIZE);
+        for (int dx = -WATERSHED_SCAN_RADIUS; dx <= WATERSHED_SCAN_RADIUS; dx++) {
+            for (int dz = -WATERSHED_SCAN_RADIUS; dz <= WATERSHED_SCAN_RADIUS; dz++) {
+                final WatershedRegionData data = getWatershedRegion(mrx + dx, mrz + dz, generator, chunk, randomState);
+                for (WatershedLake lake : data.lakes) {
+                    if (!laysLake(lake, WORLD_SEA_LEVEL) || lakes.contains(lake)) continue;
+                    if (lake.maxX + lakeMargin <= startX || lake.minX - lakeMargin >= startX + 16
+                            || lake.maxZ + lakeMargin <= startZ || lake.minZ - lakeMargin >= startZ + 16) continue;
+                    lakes.add(lake);
+                }
+            }
+        }
+        final java.util.List<WatershedPath> rivers = new java.util.ArrayList<>();
+        for (WatershedPath p : mountainPathsIn(startX, startZ, startX + 15, startZ + 15, RIVER_POND_REACH + 16.0,
+                generator, randomState)) {
+            if (carvedRiver(p, generator, randomState)) rivers.add(p);
+        }
+        if (lakes.isEmpty() && rivers.isEmpty()) return;
+
+        final net.minecraft.world.level.block.state.BlockState air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        for (int i = 0; i < 256; i++) {
+            if (top[i] == Integer.MIN_VALUE) continue;
+            final int x = startX + (i & 15), z = startZ + (i >> 4);
+            int surface = Integer.MAX_VALUE;
+            for (WatershedLake lake : lakes) {
+                if (lake.waterY < surface && lake.near(x, z, LAKE_POND_REACH)) surface = lake.waterY;
+            }
+            double nearest = RIVER_POND_REACH;
+            int riverY = Integer.MAX_VALUE;
+            for (WatershedPath p : rivers) {
+                final WatershedPath.RiverNodeData d = p.getClosestNodeData(x + 0.5, z + 0.5);
+                final double edge = d.distance - d.width;
+                if (edge <= nearest) {
+                    nearest = edge;
+                    riverY = d.y;
+                }
+            }
+            surface = Math.max(Math.min(surface, riverY), WORLD_SEA_LEVEL - 1);
+            if (surface >= top[i]) continue;
+            final java.util.BitSet guard = protectedBlocks[i];
+            for (int y = Math.max(surface, ownWater[i]) + 1; y <= Math.min(top[i], surface + POND_HEIGHT); y++) {
+                if (guard != null && y >= minH && guard.get(y - minH)) continue;
+                if (chunk.getBlockState(pos.set(x, y, z)).is(net.minecraft.world.level.block.Blocks.WATER)) {
+                    chunk.setBlockState(pos, air, false);
+                }
+            }
+        }
+    }
+
     public static boolean isOceanBiomeAt(net.minecraft.world.level.chunk.ChunkGenerator generator, int x, int z,
             net.minecraft.world.level.levelgen.RandomState randomState) {
         if (generator == null || randomState == null)
@@ -793,6 +968,166 @@ public class HydrologyManager {
 
     private static long WORLD_SEED = 0;
     private static volatile int WORLD_SEA_LEVEL = 63;
+
+    public static void setLowlandCut(com.AdamNew.dynamicwaters.terrain.LowlandCut.Settings cut) {
+        if (com.AdamNew.dynamicwaters.terrain.LowlandCut.configure(cut)) {
+            MainRivers.clearCaches();
+            clearCaches();
+        }
+    }
+
+    public static boolean valleyLowland() {
+        return com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley();
+    }
+
+    private static volatile WorldShape.Scale RIVER_SCALE = WorldShape.Scale.DEFAULT;
+
+    public static void setRiverScale(WorldShape.Scale scale) {
+        if (!RIVER_SCALE.equals(scale)) {
+            RIVER_SCALE = scale;
+            MainRivers.clearCaches();
+            clearCaches();
+        }
+    }
+
+    public static WorldShape.Scale riverScale() {
+        return RIVER_SCALE;
+    }
+
+    private static final int[][] LAB_CARVE_AT = labRects(System.getProperty("dynamicwaters.labCarveAt"));
+
+    private static int[][] labRects(String s) {
+        if (s == null) return null;
+        final String[] rects = s.split(";");
+        final int[][] out = new int[rects.length][];
+        for (int i = 0; i < rects.length; i++) {
+            final String[] p = rects[i].split(",");
+            out[i] = new int[] {Integer.parseInt(p[0].trim()), Integer.parseInt(p[1].trim()), Integer.parseInt(p[2].trim()),
+                    Integer.parseInt(p[3].trim())};
+        }
+        return out;
+    }
+
+    private static boolean labCarveHere(int x, int z) {
+        if (LAB_CARVE_AT == null) return false;
+        for (int[] r : LAB_CARVE_AT) {
+            if (x >= r[0] && z >= r[1] && x <= r[2] && z <= r[3]) return true;
+        }
+        return false;
+    }
+
+    public static void labCarveColumns(net.minecraft.server.level.ServerLevel level) {
+        if (LAB_CARVE_AT == null) return;
+        final net.minecraft.world.level.chunk.ChunkGenerator gen = level.getChunkSource().getGenerator();
+        final net.minecraft.world.level.levelgen.RandomState rs = level.getChunkSource().randomState();
+        for (int[] r : LAB_CARVE_AT) {
+            for (int z = r[1]; z <= r[3]; z++) {
+                for (int x = r[0]; x <= r[2]; x++) {
+                    final int ground = CoarseHeightField.surfaceAt(x, z, gen, rs) - 1;
+                    labCarveDump(x, z, ground, calculateRiverCarving(x, z, ground, level.getSeaLevel(), gen, level, rs),
+                            gen, level, rs);
+                }
+            }
+        }
+    }
+
+    public static void labCarveDump(int x, int z, int originalY, RiverCarving c,
+            net.minecraft.world.level.chunk.ChunkGenerator generator, net.minecraft.world.level.LevelHeightAccessor level,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        if (!labCarveHere(x, z)) return;
+        final StringBuilder sb = new StringBuilder("Dynamic Waters lab: carve ").append(x).append(' ').append(z)
+                .append(" orig ").append(originalY);
+        for (java.lang.reflect.Field f : RiverCarving.class.getFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            try {
+                final Object v = f.get(c);
+                if (v instanceof Boolean b && !b) continue;
+                sb.append(' ').append(f.getName()).append('=').append(v);
+            } catch (IllegalAccessException ignored) {
+            }
+        }
+        for (com.AdamNew.dynamicwaters.river.RiverGraphEdge e : MainRivers.riversAt(x, z)) {
+            final double[] on = new double[2];
+            final double d = Math.sqrt(e.fractal().nearestPoint(x, z, on));
+            if (d > 200.0) continue;
+            final double[] s = new double[2];
+            final double rg = generator != null && randomState != null ? coarseGroundAt(on[0], on[1], generator, randomState) : 0.0;
+            if (generator != null && randomState != null) {
+                cutSharesAt(e, x, z, on[0], on[1], rg, generator, randomState, s);
+            }
+            sb.append(" | edge ").append(Math.round(e.source().x())).append(',').append(Math.round(e.source().y()))
+                    .append("->").append(Math.round(e.drain().x())).append(',').append(Math.round(e.drain().y()))
+                    .append(" w ").append(e.width).append(" src ").append(e.sourceEdge()).append(" delta ").append(e.delta())
+                    .append(" d ").append(Math.round(d * 10) / 10.0).append(" on ").append(Math.round(on[0])).append(',')
+                    .append(Math.round(on[1])).append(" r ").append(Math.round(waterRadiusAt(e, x, z) * 10) / 10.0)
+                    .append(" ground ").append(Math.round(rg)).append(" valley ").append(Math.round(s[0] * 100) / 100.0)
+                    .append(" tunnel ").append(Math.round(s[1] * 100) / 100.0);
+        }
+        final WatershedContext m = evaluateWatershedContext(x, z, generator, level, randomState, true);
+        if (m.bestPath != null) {
+            sb.append(" | mtn mouth ").append(Math.round(m.bestPath.segmentsX[0])).append(',')
+                    .append(Math.round(m.bestPath.segmentsZ[0])).append(" y ").append(m.bestPath.segmentsY[0])
+                    .append(" d ").append(Math.round(m.distance * 10) / 10.0).append(" w ").append(Math.round(m.width * 10) / 10.0)
+                    .append(" hitMain ").append(m.bestPath.hitMainRiver).append(" node ").append(m.bestNodeIndex)
+                    .append(" y ").append(m.bestY);
+            final int src = m.bestPath.validNodeCount - 1;
+            if (src >= 0) {
+                sb.append(" source ").append(Math.round(m.bestPath.segmentsX[src])).append(',')
+                        .append(Math.round(m.bestPath.segmentsZ[src])).append(':').append(m.bestPath.segmentsY[src])
+                        .append(" of ").append(m.bestPath.validNodeCount);
+            }
+            sb.append(" nodes");
+            for (int i = 0; i < Math.min(m.bestPath.validNodeCount, 16); i++) {
+                sb.append(' ').append(Math.round(m.bestPath.segmentsX[i])).append(',').append(Math.round(m.bestPath.segmentsZ[i]))
+                        .append(':').append(m.bestPath.segmentsY[i]);
+            }
+        }
+
+        {
+            final int homeRx = Math.floorDiv(x, WATERSHED_REGION_SIZE), homeRz = Math.floorDiv(z, WATERSHED_REGION_SIZE);
+            for (int dx = -WATERSHED_SCAN_RADIUS; dx <= WATERSHED_SCAN_RADIUS; dx++) {
+                for (int dz = -WATERSHED_SCAN_RADIUS; dz <= WATERSHED_SCAN_RADIUS; dz++) {
+                    final WatershedRegionData rd = getWatershedRegion(homeRx + dx, homeRz + dz, generator, level, randomState);
+                    for (WatershedPath p : rd.grid.getPathsNear(x, z, homeRx + dx, homeRz + dz)) {
+                        final WatershedPath.RiverNodeData d = p.getClosestNodeData(x, z);
+                        if (d.distance > 30.0) continue;
+                        sb.append(" | path ").append(Math.round(p.segmentsX[0])).append(',').append(Math.round(p.segmentsZ[0]))
+                                .append(" n").append(d.nodeIndex).append('/').append(p.validNodeCount).append(" y ").append(d.y)
+                                .append(" d ").append(Math.round(d.distance * 10) / 10.0).append(" w ")
+                                .append(Math.round(channelFullWidth(d, x, z) * 10) / 10.0).append(d.beyondEnd ? " END" : "");
+                    }
+                }
+            }
+        }
+        final WatershedLake lake = findLake(x, z, generator, level, randomState, true);
+        if (lake != null) sb.append(" | lake y ").append(lake.waterY).append(" inside ").append(lake.inside(x, z));
+        final WatershedLake beside = lake != null ? lake : lakeBeside(x, z, originalY, generator, level, randomState, true);
+        if (beside != null && originalY < beside.waterY) {
+            sb.append(" | hollow ").append(LakeHollows.kind(beside, x, z, originalY, LAKE_SHORE_LIP, generator, randomState))
+                    .append(" lays ").append(laysLake(beside, getSeaLevel())).append(" near ").append(beside.near(x, z, LakeHollows.LAKE_HOLLOW_REACH));
+        }
+        com.mojang.logging.LogUtils.getLogger().info(sb.toString());
+    }
+
+    public static void labClientFlow(net.minecraft.world.entity.Entity player) {
+        final double x = player.getX(), z = player.getZ();
+        final int y = Mth.floor(player.getY());
+        final net.minecraft.world.phys.Vec3 flow = getRiverFlow(x, y, z, player.level());
+        final com.AdamNew.dynamicwaters.river.RiverContext near = MainRivers.findNearest(x, z, null, dummyAccessor, null);
+        com.mojang.logging.LogUtils.getLogger().info("[labClientFlow] {} {} {} water {} flow {} {} lowland {} regions {}/{} sea {} seed {}",
+                Mth.floor(x), y, Mth.floor(z), player.isInWater(), String.format("%.3f", flow.x), String.format("%.3f", flow.z),
+                near == null ? "none" : String.format("%.1f", Math.sqrt(near.distSq())), MainRivers.builtRegionCount(),
+                WATERSHED_REGION_CACHE.size(), WORLD_SEA_LEVEL, WORLD_SEED);
+
+        final String quit = System.getProperty("dynamicwaters.labClientQuitFile");
+        if (quit != null && java.nio.file.Files.exists(java.nio.file.Path.of(quit))) {
+            com.AdamNew.dynamicwaters.client.LabClientQuit.quit();
+        }
+    }
+
+    public static long worldSeed() {
+        return WORLD_SEED;
+    }
 
     public static void setSeed(long seed) {
         if (WORLD_SEED != seed || RIVER_BED_NOISE == null) {
@@ -838,6 +1173,8 @@ public class HydrologyManager {
         TILE_BUILDS.clear();
         BasinTile.clearSeamCache();
         CoarseHeightField.reset();
+        com.AdamNew.dynamicwaters.terrain.LowlandCut.clearCaches();
+        com.AdamNew.dynamicwaters.terrain.RiverChance.clearCaches();
         POOL_BODIES.clear();
         POOL_CLEAR.clear();
         REGION_GENERATION.incrementAndGet();
@@ -931,7 +1268,7 @@ public class HydrologyManager {
         }
         try {
             final BasinTile tile = BasinTile.build(tx, tz, generator, randomState, WORLD_SEED, WORLD_SEA_LEVEL,
-                    BasinTile.channelThreshold(com.AdamNew.dynamicwaters.Config.MOUNTAIN_RIVER_DENSITY.get()),
+                    valleyStreams(BasinTile.channelThreshold(com.AdamNew.dynamicwaters.Config.MOUNTAIN_RIVER_DENSITY.get())),
                     com.AdamNew.dynamicwaters.Config.ENABLE_MOUNTAIN_LAKES.get());
             for (java.util.Map.Entry<Long, java.util.List<WatershedPath>> e : tile.pathsByRegion.entrySet()) {
                 final long key = e.getKey();
@@ -1283,15 +1620,68 @@ public class HydrologyManager {
         final net.minecraft.world.level.levelgen.RandomState rs = getGlobalRandomState();
         if (gen == null || rs == null) return false;
         final double[] onRiver = new double[2];
+        final boolean valleys = com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley();
         for (com.AdamNew.dynamicwaters.river.RiverGraphEdge path : com.AdamNew.dynamicwaters.MainRivers
                 .riversAt(x, z)) {
-            final double reach = path.maxWaterRadius() + GORGE_REACH + GORGE_SEAL + 4.0;
+            final boolean valleyHere = valleys && !path.delta();
+            final double reach = path.maxWaterRadius() + (valleyHere ? VALLEY_REACH + VALLEY_WARP + 1.0
+                    : GORGE_REACH + GORGE_SEAL + 4.0 + (path.delta() ? DELTA_GORGE_FLATS : 0.0));
             if (path.fractal().boxDistanceSq(x, z) >= reach * reach) continue;
-            if (path.fractal().nearestPoint(x, z, onRiver) >= reach * reach) continue;
-            if (coarseGroundAt(onRiver[0], onRiver[1], gen, rs) <= GORGE_FROM) continue;
+            final double dSq = path.fractal().nearestPoint(x, z, onRiver);
+            if (dSq >= reach * reach) continue;
+            final double riverGround = coarseGroundAt(onRiver[0], onRiver[1], gen, rs);
+            final double[] s = CUT_SHARES.get();
+            cutSharesAt(path, x, z, onRiver[0], onRiver[1], riverGround, gen, rs, s);
+            if (valleyHere && s[0] >= 0.5) {
+                if (inValleyCut(x, z, Math.sqrt(dSq) - waterRadiusAt(path, x, z), waterRadiusAt(path, x, z), gen, rs)) {
+                    return true;
+                }
+                continue;
+            }
+            if (riverGround <= GORGE_FROM) continue;
+
+            if (s[1] >= 0.5) continue;
             return true;
         }
         return false;
+    }
+
+    public static double valleyGroundAt(double x, double z, double ground,
+            net.minecraft.world.level.chunk.ChunkGenerator gen, net.minecraft.world.level.levelgen.RandomState rs) {
+        if (!com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley() || Config.NORMAL_RIVER_TUNNELS.get()) {
+            return Double.MAX_VALUE;
+        }
+        final double base = getSeaLevel() - 1;
+        if (ground <= base) return Double.MAX_VALUE;
+        final double[] onRiver = new double[2];
+        final double[] s = CUT_SHARES.get();
+        double lowest = Double.MAX_VALUE;
+        for (com.AdamNew.dynamicwaters.river.RiverGraphEdge path : com.AdamNew.dynamicwaters.MainRivers.riversAt(x, z)) {
+            if (path.delta()) continue;
+            final double r = waterRadiusAt(path, x, z);
+            final double reach = r + VALLEY_REACH + VALLEY_WARP + 1.0;
+            if (path.fractal().boxDistanceSq(x, z) >= reach * reach) continue;
+            final double dSq = path.fractal().nearestPoint(x, z, onRiver);
+            if (dSq >= reach * reach) continue;
+            final double riverGround = coarseGroundAt(onRiver[0], onRiver[1], gen, rs);
+            cutSharesAt(path, x, z, onRiver[0], onRiver[1], riverGround, gen, rs, s);
+            if (s[0] <= 0.0) continue;
+
+            final double out = Math.max(0.0, Math.sqrt(dSq) - r);
+            final double cut = lowlandRouteGround(x, z, ground, out, r, out, r, riverGround, s[0], s[1], getSeaLevel(), false);
+            if (cut < ground) lowest = Math.min(lowest, cut);
+        }
+        return lowest;
+    }
+
+    private static boolean inValleyCut(double x, double z, double dOut, double halfWidth,
+            net.minecraft.world.level.chunk.ChunkGenerator gen, net.minecraft.world.level.levelgen.RandomState rs) {
+        final int ground = CoarseHeightField.surfaceAt(Mth.floor(x), Mth.floor(z), gen, rs) - 1;
+        final double base = getSeaLevel() - 1;
+        if (ground <= base + 1) return false;
+        final double rise = valleyRise(x, z, Math.max(0.0, dOut - GORGE_SEAL), halfWidth, ground - base,
+                coarseGroundAt(x, z, gen, rs) - base);
+        return rise != Double.MAX_VALUE && base + rise < ground;
     }
 
     public static WatershedLake findLake(double x, double z,
@@ -1385,10 +1775,96 @@ public class HydrologyManager {
     static boolean lakeWaterAt(WatershedLake lake, double x, double z, int ground,
             net.minecraft.world.level.chunk.ChunkGenerator generator,
             net.minecraft.world.level.levelgen.RandomState randomState) {
-        if (lake.bedColumn(ground) && lake.inside(x, z)) return true;
-        if (lake.holdsColumn(ground) && lake.touchesInside(x, z)) return true;
-        return ground < lake.waterY && lake.holdsColumn(ground) && lake.shoreBand(x, z)
+        if (lake.inside(x, z) && (lake.bedColumn(ground)
+                || ground < lake.waterY && lake.shoreDistance(Mth.floor(x), Mth.floor(z)) >= LAKE_HOLE_INSET)) return true;
+        final boolean outer = lake.holdsColumn(ground) && lake.touchesInside(x, z)
+                || ground < lake.waterY && lake.holdsColumn(ground) && lake.shoreBand(x, z)
                 && !lake.touchesInside(x, z) && !lakeDrainsHere(lake, x, z, generator, randomState);
+        return outer && !lakeRimBeside(lake, Mth.floor(x), Mth.floor(z), generator, randomState);
+    }
+
+    private static final int LAKE_RIVER_RIM_DROP = 2;
+
+    private static final int[][] BESIDE = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+
+    static boolean lakeRimBeside(WatershedLake lake, int x, int z, net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        return generator != null && randomState != null
+                && channelBelow(x, z, lake.waterY - LAKE_RIVER_RIM_DROP + 1, true, generator, randomState);
+    }
+
+    public static java.util.List<WatershedPath> mountainPathsIn(int x0, int z0, int x1, int z1, double margin,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        final java.util.List<WatershedPath> out = new java.util.ArrayList<>();
+        if (generator == null || randomState == null) return out;
+        final java.util.Set<WatershedPath> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        final int rx0 = Math.floorDiv(x0, WATERSHED_REGION_SIZE) - WATERSHED_SCAN_RADIUS;
+        final int rx1 = Math.floorDiv(x1, WATERSHED_REGION_SIZE) + WATERSHED_SCAN_RADIUS;
+        final int rz0 = Math.floorDiv(z0, WATERSHED_REGION_SIZE) - WATERSHED_SCAN_RADIUS;
+        final int rz1 = Math.floorDiv(z1, WATERSHED_REGION_SIZE) + WATERSHED_SCAN_RADIUS;
+        for (int rx = rx0; rx <= rx1; rx++) {
+            for (int rz = rz0; rz <= rz1; rz++) {
+                for (WatershedPath p : getWatershedRegion(rx, rz, generator, dummyAccessor, randomState).allPaths) {
+                    if (p.validNodeCount < 2 || p.maxX + margin < x0 || p.minX - margin > x1 || p.maxZ + margin < z0
+                            || p.minZ - margin > z1) continue;
+                    if (seen.add(p)) out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    public static boolean carvedRiver(WatershedPath p, net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        if (feedsDelta(p, generator, dummyAccessor, randomState)) return false;
+        return Config.NORMAL_RIVER_TUNNELS.get() || !leftDry(p, getSeaLevel(), generator, dummyAccessor, randomState);
+    }
+
+    public static double mountainWidthAt(WatershedPath p, double x, double z) {
+        final WatershedPath.RiverNodeData d = p.getClosestNodeData(x, z);
+        return d.distance == Double.MAX_VALUE ? 0.0 : channelFullWidth(d, x, z);
+    }
+
+    static boolean mountainChannelNear(double x, double z, double clear,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        if (generator == null || randomState == null) return false;
+        final int cx = Mth.floor(x), cz = Mth.floor(z);
+        final int mrx = Math.floorDiv(cx, WATERSHED_REGION_SIZE), mrz = Math.floorDiv(cz, WATERSHED_REGION_SIZE);
+        for (int dx = -WATERSHED_SCAN_RADIUS; dx <= WATERSHED_SCAN_RADIUS; dx++) {
+            for (int dz = -WATERSHED_SCAN_RADIUS; dz <= WATERSHED_SCAN_RADIUS; dz++) {
+                final WatershedRegionData data = getWatershedRegion(mrx + dx, mrz + dz, generator, dummyAccessor, randomState);
+                for (WatershedPath p : data.grid.getPathsNear(cx, cz, mrx + dx, mrz + dz)) {
+                    final WatershedPath.RiverNodeData d = p.getClosestNodeData(x, z);
+                    if (d.distance == Double.MAX_VALUE || d.distance >= channelFullWidth(d, x, z) + clear) continue;
+                    if (feedsDelta(p, generator, dummyAccessor, randomState)) continue;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static boolean channelBelow(int x, int z, int waterY, boolean beside,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        final int mrx = Math.floorDiv(x, WATERSHED_REGION_SIZE), mrz = Math.floorDiv(z, WATERSHED_REGION_SIZE);
+        final int points = beside ? BESIDE.length : 1;
+        for (int dx = -WATERSHED_SCAN_RADIUS; dx <= WATERSHED_SCAN_RADIUS; dx++) {
+            for (int dz = -WATERSHED_SCAN_RADIUS; dz <= WATERSHED_SCAN_RADIUS; dz++) {
+                final WatershedRegionData data = getWatershedRegion(mrx + dx, mrz + dz, generator, dummyAccessor, randomState);
+                for (WatershedPath p : data.grid.getPathsNear(x, z, mrx + dx, mrz + dz)) {
+                    for (int k = 0; k < points; k++) {
+                        final int px = x + BESIDE[k][0], pz = z + BESIDE[k][1];
+                        final WatershedPath.RiverNodeData d = p.getClosestNodeData(px, pz);
+                        if (d.distance == Double.MAX_VALUE || d.beyondEnd || d.y >= waterY) continue;
+                        if (d.distance < channelFullWidth(d, px, pz)) return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static int lipDepth(WatershedLake lake, boolean covered, LakeHollows.Kind hollow, double x, double z,
@@ -1409,6 +1885,11 @@ public class HydrologyManager {
 
     public static boolean isInLake(double x, double z) {
         return findLake(x, z, null, null, null, true) != null;
+    }
+
+    public static boolean inLakeWater(double x, int y, double z) {
+        final WatershedLake lake = findLake(x, z, null, null, null, true);
+        return lake != null && lake.inside(x, z) && Math.abs(lake.waterY - y) <= 1 && laysLake(lake, WORLD_SEA_LEVEL);
     }
 
     public static boolean isInOrBesideLake(double x, double z) {
@@ -1437,6 +1918,8 @@ public class HydrologyManager {
 
     private static final double DELTA_PLAIN = 24.0;
     private static final double DELTA_PLAIN_SLOPE = 0.15;
+
+    private static final double DELTA_GORGE_FLATS = 6.0;
 
     private static final int DELTA_FLAT_ABOVE = 2;
 
@@ -1593,6 +2076,50 @@ public class HydrologyManager {
     private static final double RIVER_SPLIT_FLOW_REACH = 8.0;
     private static final double RIVER_SPLIT_NONE = -1.0E9;
 
+    private static final double GRASSY_SPLIT_MORE = 2.5;
+    private static final double GRAVEL_BAR_HUMP = 4.0;
+    private static final java.util.Map<Long, Boolean> GRASSY_STRETCHES = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile java.util.List<? extends String> gravelBarListRaw = null;
+    private static volatile com.AdamNew.dynamicwaters.terrain.BiomeList gravelBarList =
+            com.AdamNew.dynamicwaters.terrain.BiomeList.NONE;
+
+    private static boolean grassyStretch(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge) {
+        final net.minecraft.world.level.chunk.ChunkGenerator generator = globalGenerator;
+        final net.minecraft.world.level.levelgen.RandomState random = globalRandomState;
+        if (generator == null || random == null || !Config.RIVER_BEACHES.get()) return false;
+        final java.util.List<? extends String> raw = Config.GRAVEL_BAR_BIOMES.get();
+        if (raw != gravelBarListRaw) {
+            gravelBarList = com.AdamNew.dynamicwaters.terrain.BiomeList.of(raw);
+            gravelBarListRaw = raw;
+            GRASSY_STRETCHES.clear();
+        }
+        if (raw.isEmpty()) return false;
+        final long key = riverSplitHash(edge);
+        final Boolean known = GRASSY_STRETCHES.get(key);
+        if (known != null) return known;
+        final double[] s = edge.fractal().segments;
+        final int points = s.length / 2;
+
+        final boolean was = isGeneratingRivers();
+        setGeneratingRivers(true);
+        int listed = 0;
+        try {
+            for (int k = 1; k <= 3 && points > 0; k++) {
+                final int i = Math.min(points - 1, points * k / 4);
+                final int px = (int) Math.floor(s[2 * i]), pz = (int) Math.floor(s[2 * i + 1]);
+                final net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biome = generator.getBiomeSource()
+                        .getNoiseBiome(net.minecraft.core.QuartPos.fromBlock(px), net.minecraft.core.QuartPos.fromBlock(getSeaLevel()),
+                                net.minecraft.core.QuartPos.fromBlock(pz), random.sampler());
+                if (gravelBarList.test(biome)) listed++;
+            }
+        } finally {
+            setGeneratingRivers(was);
+        }
+        final boolean grassy = listed >= 2;
+        GRASSY_STRETCHES.put(key, grassy);
+        return grassy;
+    }
+
     private static long riverSplitHash(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge) {
         long h = WORLD_SEED ^ 0x5DA7E1B1L;
         h = it.unimi.dsi.fastutil.HashCommon.mix(h + Math.round(edge.source().x()));
@@ -1602,11 +2129,12 @@ public class HydrologyManager {
     }
 
     private static boolean riverSplits(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge) {
-        final double chance = Config.RIVER_SPLITS.get().chance;
+        double chance = Config.RIVER_SPLITS.get().chance;
         if (chance <= 0.0 || !edge.sourceEdge() || edge.delta()) return false;
         if (Math.hypot(edge.drain().x() - edge.source().x(), edge.drain().y() - edge.source().y()) < RIVER_SPLIT_MIN_LENGTH) {
             return false;
         }
+        if (grassyStretch(edge)) chance = Math.min(1.0, chance * GRASSY_SPLIT_MORE);
         return (riverSplitHash(edge) >>> 11) * 0x1.0p-53 < chance;
     }
 
@@ -1663,8 +2191,11 @@ public class HydrologyManager {
             }
             best = Math.max(best, depth);
         }
-        return best;
+
+        return Math.min(best, Math.min(at[4], at[5] - at[4]) - RIVER_SPLIT_FADE);
     }
+
+    private static final double RIVER_SPLIT_FADE = (NORMAL_RIVER_DEPTH + 1.0) / RIVER_SPLIT_SHOAL;
 
     private static boolean onRiverSplit(double x, double z, double in) {
         for (com.AdamNew.dynamicwaters.river.RiverGraphEdge edge : MainRivers.riversAt(x, z)) {
@@ -1732,6 +2263,103 @@ public class HydrologyManager {
     private static final double GORGE_HOLD = 4.0;
 
     private static final double GORGE_SEAL = 2.0;
+
+    private static double gorgeClimb(double riverDepth, double ground, int base) {
+        return Math.max(riverDepth, (ground - base) * 1.1 + 6.0);
+    }
+
+    private static final double BEACH_MIN = 1.0, BEACH_MORE = 1.6, BEACH_BED_IN = 3.0;
+
+    private static final double BEACH_WATER_MIN = 1.0;
+
+    private static final double BEACH_STEPS = 4.0;
+
+    private static final double BEACH_RIM = 3.0;
+    private static final int BEACH_RIM_RISE = 4;
+
+    private static final double BEACH_EDGE_OUT = 1.0;
+
+    public static final byte BEACH_SHORE = 1, BEACH_BED = 2, BEACH_TOP = 3, BEACH_EDGE = 4;
+
+    public static final byte BEACH_TUFT = 5, BEACH_PUDDLE = 6;
+
+    public static final byte BEACH_DEEP = 7;
+
+    public static double beachWidth(double x, double z) {
+        return BEACH_MIN + BEACH_MORE * (0.5 + 0.5 * RIVER_BED_NOISE.getValue(x * 0.045 + 61.0, z * 0.045 - 29.0));
+    }
+
+    public static double beachBedIn() {
+        return BEACH_BED_IN;
+    }
+
+    public static double beachEdgeOut() {
+        return BEACH_EDGE_OUT;
+    }
+
+    public static double beachRim() {
+        return BEACH_RIM;
+    }
+
+    public static int beachRimRise() {
+        return BEACH_RIM_RISE;
+    }
+
+    public static double riverNoise(double x, double z) {
+        return RIVER_BED_NOISE.getValue(x, z);
+    }
+
+    private static final double VALLEY_FLOOD = 0.8, VALLEY_FLOOD_MIN = 3.0;
+
+    private static final double VALLEY_FOOT = 0.3, VALLEY_BOW = 0.007, VALLEY_SPAN = 70.0;
+    private static final double VALLEY_WALL_AT = 96.0, VALLEY_WALL_DEPTH = 64.0;
+    static final double VALLEY_REACH = VALLEY_WALL_AT + GORGE_REACH + GORGE_ROUGH;
+
+    private static final double VALLEY_WARP = 6.0, VALLEY_ROUGH = 1.0;
+
+    private static final double VALLEY_SPUR = 2.0, VALLEY_SPUR_HOLD = 1.5;
+
+    private static final double VALLEY_STREAMS = 0.4;
+
+    private static int valleyStreams(int threshold) {
+        return com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley()
+                ? Math.max(4, (int) Math.round(threshold * VALLEY_STREAMS)) : threshold;
+    }
+
+    private static int valleyStreamLevel(WatershedContext ctx) {
+        final WatershedPath p = ctx.bestPath;
+        final int i = ctx.bestNodeIndex;
+        if (p == null || i < 0 || i >= p.validNodeCount) return ctx.bestY;
+        int y = Math.max(ctx.bestY, p.segmentsY[i]);
+        if (i > 0) y = Math.max(y, p.segmentsY[i - 1]);
+        if (i + 1 < p.validNodeCount) y = Math.max(y, p.segmentsY[i + 1]);
+        return y;
+    }
+
+    private static final double VALLEY_SKIN = 4.0;
+
+    private static double valleyRise(double x, double z, double dOut, double halfWidth, double groundOver,
+            double climbOver) {
+        final double warp = VALLEY_WARP * RIVER_BED_NOISE.getValue(x * 0.021 + 77.7, z * 0.021 - 55.5)
+                * Math.min(1.0, dOut / 8.0);
+        final double d = Math.max(0.0, dOut + warp);
+        if (d >= VALLEY_REACH) return Double.MAX_VALUE;
+        if (d < 1.0) return 0.0;
+        final double flood = Math.max(VALLEY_FLOOD_MIN, VALLEY_FLOOD * halfWidth)
+                * (1.0 + 0.5 * RIVER_BED_NOISE.getValue(x * 0.013 - 31.0, z * 0.013 + 17.0));
+        if (d < flood) return 1.0;
+        final double e = Math.max(0.0, Math.min(d, VALLEY_WALL_AT) - flood);
+        final double low = Math.min(e, VALLEY_SPAN);
+        double rise = 1.0 + VALLEY_FOOT * low + VALLEY_BOW * low * low;
+        if (e > VALLEY_SPAN) rise += (VALLEY_FOOT + 2.0 * VALLEY_BOW * VALLEY_SPAN) * (e - VALLEY_SPAN);
+        final double rough = 0.7 * RIVER_BED_NOISE.getValue(x * 0.09 + 300.0, z * 0.09 - 300.0)
+                + 0.3 * RIVER_BED_NOISE.getValue(x * 0.27 - 500.0, z * 0.27 + 500.0);
+        rise += VALLEY_ROUGH * rough * Math.min(1.0, rise / 12.0);
+        if (d <= VALLEY_WALL_AT) return rise;
+
+        return gorgeWallY(x, z, d - VALLEY_WALL_AT, (int) Math.floor(groundOver), (int) Math.floor(rise),
+                gorgeClimb(VALLEY_WALL_DEPTH, climbOver, (int) Math.floor(rise)));
+    }
 
     private static final class GorgeProfile {
         static final int MAX_BENCHES = 16;
@@ -1801,7 +2429,107 @@ public class HydrologyManager {
         return waterY + h;
     }
 
-    public static final double LOWLAND_CORRIDOR_REACH = GORGE_REACH + GORGE_ROUGH + 1.0;
+    public static final double LOWLAND_CORRIDOR_REACH = GORGE_REACH + GORGE_ROUGH + BEACH_MIN + BEACH_MORE + 1.0;
+
+    public static double lowlandCorridorReach() {
+        return com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley() ? VALLEY_REACH + VALLEY_WARP + 1.0
+                : LOWLAND_CORRIDOR_REACH;
+    }
+
+    private static final ThreadLocal<double[]> CUT_SHARES = ThreadLocal.withInitial(() -> new double[2]);
+
+    private static final double CUT_ALONG_STEP = 12.0, CUT_ALONG_SOFT = 12.0;
+
+    private record CutAlong(com.AdamNew.dynamicwaters.river.RiverPathFractal of, float[] samples) {
+    }
+
+    private static float[] cutAlong(com.AdamNew.dynamicwaters.river.RiverGraphEdge path,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        final com.AdamNew.dynamicwaters.river.RiverPathFractal course = path.fractal();
+        if (path.cutAlong instanceof CutAlong c && c.of() == course) return c.samples();
+        final double[] seg = course.segments;
+        final java.util.ArrayList<double[]> points = new java.util.ArrayList<>();
+        double carry = 0.0;
+        for (int k = 0; k + 3 < seg.length; k += 2) {
+            final double ax = seg[k], az = seg[k + 1], bx = seg[k + 2], bz = seg[k + 3];
+            final double len = Math.sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
+            double t = carry;
+            while (t <= len) {
+                final double f = len > 0.0 ? t / len : 0.0;
+                points.add(new double[] {ax + (bx - ax) * f, az + (bz - az) * f});
+                t += CUT_ALONG_STEP;
+            }
+            carry = t - len;
+        }
+        if (seg.length >= 2) points.add(new double[] {seg[seg.length - 2], seg[seg.length - 1]});
+        final float[] out = new float[points.size() * 4];
+        final double[] s = new double[2];
+        for (int i = 0; i < points.size(); i++) {
+            final double px = points.get(i)[0], pz = points.get(i)[1];
+            com.AdamNew.dynamicwaters.terrain.LowlandCut.shares(px, pz, coarseGroundAt(px, pz, generator, randomState),
+                    generator, randomState, s);
+            out[i * 4] = (float) px;
+            out[i * 4 + 1] = (float) pz;
+            out[i * 4 + 2] = (float) s[0];
+            out[i * 4 + 3] = (float) s[1];
+        }
+        path.cutAlong = new CutAlong(course, out);
+        return out;
+    }
+
+    public static void cutSharesAt(com.AdamNew.dynamicwaters.river.RiverGraphEdge path, double x, double z,
+            double onX, double onZ, double riverGround, net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState, double[] out) {
+        if (generator == null || randomState == null || !com.AdamNew.dynamicwaters.terrain.LowlandCut.settings().mixed()) {
+            com.AdamNew.dynamicwaters.terrain.LowlandCut.shares(onX, onZ, riverGround, generator, randomState, out);
+            return;
+        }
+        final float[] s = cutAlong(path, generator, randomState);
+        final int n = s.length / 4;
+        if (n == 0) {
+            com.AdamNew.dynamicwaters.terrain.LowlandCut.shares(onX, onZ, riverGround, generator, randomState, out);
+            return;
+        }
+        double nearest = Double.MAX_VALUE;
+        for (int i = 0; i < n; i++) {
+            final double dx = s[i * 4] - x, dz = s[i * 4 + 1] - z;
+            nearest = Math.min(nearest, dx * dx + dz * dz);
+        }
+        nearest = Math.sqrt(nearest);
+        double sum = 0.0, valley = 0.0, tunnel = 0.0;
+        for (int i = 0; i < n; i++) {
+            final double dx = s[i * 4] - x, dz = s[i * 4 + 1] - z;
+            final double far = (Math.sqrt(dx * dx + dz * dz) - nearest) / CUT_ALONG_SOFT;
+            if (far > 3.0) continue;
+            final double w = Math.exp(-far * far);
+            sum += w;
+            valley += w * s[i * 4 + 2];
+            tunnel += w * s[i * 4 + 3];
+        }
+        valley /= sum;
+        tunnel /= sum;
+
+        if (tunnel >= 0.5) {
+            out[0] = 0.0;
+            out[1] = 1.0;
+        } else {
+            out[0] = tunnel > 0.0 ? Math.min(1.0, valley / (1.0 - tunnel)) : valley;
+            out[1] = 0.0;
+        }
+    }
+
+    public static double cutGorgeAt(double x, double z, net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState) {
+        if (com.AdamNew.dynamicwaters.terrain.LowlandCut.allValley()) return 0.0;
+        if (!com.AdamNew.dynamicwaters.terrain.LowlandCut.settings().mixed() || generator == null || randomState == null) {
+            return 1.0;
+        }
+        final double[] s = CUT_SHARES.get();
+        com.AdamNew.dynamicwaters.terrain.LowlandCut.shares(x, z, coarseGroundAt(x, z, generator, randomState),
+                generator, randomState, s);
+        return 1.0 - s[0] - s[1];
+    }
     public static final double LOWLAND_FALL_MIN = 6.0;
 
     private static final double GORGE_RIM_OUTLET = 0.5;
@@ -1885,6 +2613,8 @@ public class HydrologyManager {
     private static final int RAVINE_LAST = 8;
     private static final double RAVINE_INTO = 8.0;
 
+    private static final double RAVINE_EARLY_FALL = 8.0;
+
     static final class Ravine {
         final double px, pz, ux, uz, length, width;
 
@@ -1948,6 +2678,17 @@ public class HydrologyManager {
             int i = from.length - 1;
             while (i > 0 && t < from[i]) i--;
             return level[i];
+        }
+
+        int fallenLevel(double x, double z, double along, int ground, int bowl) {
+            final double t = along + RAVINE_LIP_ROUGH * RIVER_BED_NOISE.getValue(x * 0.27 + 31.0, z * 0.27 - 83.0);
+            int i = from.length - 1;
+            while (i > 0 && t < from[i]) i--;
+            if (i + 1 >= from.length || from[i + 1] - t > RAVINE_EARLY_FALL) return Integer.MIN_VALUE;
+            for (int j = i + 1; j < level.length; j++) {
+                if (level[j] - bowl <= ground) return level[j];
+            }
+            return Integer.MIN_VALUE;
         }
 
         double sideLine(double t) {
@@ -2060,7 +2801,8 @@ public class HydrologyManager {
         double best = DELTA_FED_REACH;
         final double[] on = new double[2];
         for (com.AdamNew.dynamicwaters.river.RiverGraphEdge e : MainRivers.riversAt(mx, mz)) {
-            final double out = Math.sqrt(e.fractal().nearestPoint(mx, mz, on)) - waterRadiusAt(e, on[0], on[1]);
+            final double d = Math.sqrt(e.fractal().nearestPoint(mx, mz, on));
+            final double out = d - waterRadiusAt(e, on[0], on[1]);
             if (out < best) {
                 best = out;
                 nearest = e;
@@ -2266,6 +3008,7 @@ public class HydrologyManager {
             net.minecraft.world.level.chunk.ChunkGenerator generator,
             net.minecraft.world.level.LevelHeightAccessor level,
             net.minecraft.world.level.levelgen.RandomState randomState) {
+        if (cutGorgeAt(path.segmentsX[0], path.segmentsZ[0], generator, randomState) < 0.5) return false;
         if (path.hitMainRiver) return true;
         if (path.gorgeEntry == 0) {
             boolean in = false;
@@ -2408,7 +3151,30 @@ public class HydrologyManager {
         }
     }
 
+    private static void labDumpPaths(net.minecraft.server.level.ServerLevel level) {
+        final String rects = System.getProperty("dynamicwaters.labPathsAt");
+        if (rects == null) return;
+        final net.minecraft.world.level.chunk.ChunkGenerator gen = level.getChunkSource().getGenerator();
+        final net.minecraft.world.level.levelgen.RandomState rs = level.getChunkSource().randomState();
+        for (String rect : rects.split(";")) {
+        final String[] r = rect.split(",");
+        final int x0 = Integer.parseInt(r[0].trim()), z0 = Integer.parseInt(r[1].trim());
+        final int x1 = Integer.parseInt(r[2].trim()), z1 = Integer.parseInt(r[3].trim());
+        for (WatershedPath p : mountainPathsIn(x0, z0, x1, z1, 0.0, gen, rs)) {
+            final StringBuilder sb = new StringBuilder("[labPaths] mouth ").append(Math.round(p.segmentsX[0])).append(',')
+                    .append(Math.round(p.segmentsZ[0])).append(" n ").append(p.validNodeCount).append(" hitMain ")
+                    .append(p.hitMainRiver).append(" carved ").append(carvedRiver(p, gen, rs)).append(" nodes");
+            for (int i = 0; i < p.validNodeCount; i++) {
+                sb.append(' ').append(Math.round(p.segmentsX[i])).append(',').append(Math.round(p.segmentsZ[i])).append(':')
+                        .append(p.segmentsY[i]);
+            }
+            com.mojang.logging.LogUtils.getLogger().info(sb.toString());
+        }
+        }
+    }
+
     public static void labDumpFlow(net.minecraft.server.level.ServerLevel level) {
+        labDumpPaths(level);
         final String file = System.getProperty("dynamicwaters.labDumpFlow");
         final String rect = System.getProperty("dynamicwaters.labFlowRect");
         if (file == null || rect == null) return;
@@ -2422,7 +3188,8 @@ public class HydrologyManager {
                 final int top = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z) - 1;
                 if (!level.getFluidState(new net.minecraft.core.BlockPos(x, top, z)).is(net.minecraft.tags.FluidTags.WATER)) continue;
                 final net.minecraft.world.phys.Vec3 f = getRiverFlow(x, top, z, level);
-                sb.append(String.format(java.util.Locale.ROOT, "%d %d %d %.3f %.3f%n", x, z, top, f.x, f.z));
+                sb.append(String.format(java.util.Locale.ROOT, "%d %d %d %.3f %.3f %d%n", x, z, top, f.x, f.z,
+                        inMountainRiverMiddle(x + 0.5, top, z + 0.5) ? 1 : 0));
             }
         }
         try {
@@ -2481,8 +3248,11 @@ public class HydrologyManager {
         final double r = gorgeWaterRadius(river, on[0], on[1], generator, level, randomState);
         final double out = Math.max(0.0, d + getRiverJitter(x, z) * (r / 10.0)) - r;
         final int ground = CoarseHeightField.surfaceAt(Mth.floor(x), Mth.floor(z), generator, randomState) - 1;
-        return lowlandRouteGround(x, z, ground, out, r, coarseGroundAt(on[0], on[1], generator, randomState),
-                seaLevel, river.delta());
+
+        final int base = seaLevel - 1;
+        if (ground <= base || out <= 0.0) return ground;
+        return openRouteGround(x, z, ground, out, r, coarseGroundAt(on[0], on[1], generator, randomState), base,
+                river.delta(), coarseGroundAt(x, z, generator, randomState));
     }
 
     public static double gorgeShare(double riverGround) {
@@ -2490,19 +3260,47 @@ public class HydrologyManager {
         return t * t * (3.0 - 2.0 * t);
     }
 
-    public static double lowlandRouteGround(double x, double z, double ground, double dOut, double waterRadius,
-            double riverGround, int seaLevel, boolean delta) {
-        final double base = seaLevel - 1;
-        if (dOut <= 0.0 || ground <= base) return ground;
+    public static double lowlandGorgeAt(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge, double x, double z,
+            net.minecraft.world.level.chunk.ChunkGenerator generator,
+            net.minecraft.world.level.levelgen.RandomState randomState, double[] ground) {
+        if (Config.NORMAL_RIVER_TUNNELS.get() || edge.delta()) return 0.0;
+        final double g = coarseGroundAt(x, z, generator, randomState);
+        ground[0] = g;
+        final double[] s = new double[2];
+        cutSharesAt(edge, x, z, x, z, g, generator, randomState, s);
+        return gorgeShare(g) * Math.max(0.0, 1.0 - s[0] - s[1]);
+    }
 
+    public static double lowlandRouteGround(double x, double z, double ground, double dOut, double waterRadius,
+            double valleyOut, double valleyRadius, double riverGround, double valley, double tunnel, int seaLevel,
+            boolean delta) {
+        final double base = seaLevel - 1;
+        if (ground <= base) return ground;
+        final double v = delta ? 0.0 : valley, t = delta ? 0.0 : tunnel, g = 1.0 - v - t;
+        double out = t * ground;
+
+        if (v > 0.0) {
+            final double rise = valleyRise(x, z, Math.max(0.0, valleyOut), valleyRadius, ground - base, ground - base);
+            out += v * (rise == Double.MAX_VALUE ? ground : Math.min(ground, Math.floor(base + rise)));
+        }
+        if (g > 0.0) {
+            out += g * (dOut <= 0.0 ? ground : openRouteGround(x, z, ground, dOut, waterRadius, riverGround, base, delta,
+                    ground));
+        }
+        return out;
+    }
+
+    private static double openRouteGround(double x, double z, double ground, double dOut, double waterRadius,
+            double riverGround, double base, boolean delta, double climb) {
         final double bank = Math.min(ground, base + ChannelForm.bankRise(dOut, ground - base,
                 delta ? DELTA_PLAIN : bankMeet(waterRadius), delta ? DELTA_PLAIN_SLOPE : BANK_TALUS));
         final double gorge = gorgeShare(riverGround);
         if (gorge < 0.5 || delta) return bank;
-        if (dOut >= GORGE_REACH + GORGE_ROUGH) return ground;
+        if (dOut >= GORGE_REACH + GORGE_ROUGH + BEACH_MIN + BEACH_MORE) return ground;
 
-        final double depth = Math.max(8.0, (riverGround - base) * 1.1 + 6.0);
-        final int wallY = gorgeWallY(x, z, dOut, Mth.floor(ground), (int) base, depth);
+        final double depth = gorgeClimb(Math.max(8.0, (riverGround - base) * 1.1 + 6.0), climb, (int) base);
+        final double shore = Config.RIVER_BEACHES.get() && waterRadius >= BEACH_WATER_MIN ? beachWidth(x, z) : 0.0;
+        final int wallY = gorgeWallY(x, z, dOut - shore, Mth.floor(ground), (int) base, depth);
         return bank + (Math.min(wallY, ground) - bank) * gorge;
     }
 
@@ -2695,10 +3493,16 @@ public class HydrologyManager {
 
         public boolean riverSplit = false;
 
+        public int fordRock = Integer.MIN_VALUE;
+
+        public boolean oxbow = false;
+
         public boolean deltaFlat = false;
         public double deltaShore = Double.MAX_VALUE;
 
         public boolean deltaWater = false;
+
+        public byte beach = 0;
 
         public boolean dressCut = false;
 
@@ -2710,6 +3514,14 @@ public class HydrologyManager {
         public double distanceFromCenter = Double.MAX_VALUE;
         public double channelWidth = 0.0;
         public double waterRadius = 0.0;
+
+        public double waterEdge = Double.MAX_VALUE;
+
+        public double mountainEdge = Double.MAX_VALUE;
+        public int mountainEdgeY = Integer.MIN_VALUE;
+        public double mountainEdgeSlope = 0.0;
+
+        public boolean gravelBar = false;
 
         public double channelSlope = 0.0;
     }
@@ -2742,7 +3554,7 @@ public class HydrologyManager {
         for (com.AdamNew.dynamicwaters.river.RiverGraphEdge path : MainRivers.riversAt(x, z)) {
             final double radius = path.maxWaterRadius() * (path.delta() ? 1.0 + DELTA_RAGGED : 1.0);
             double furthest = gorgeMode ? radius + GORGE_REACH + GORGE_ROUGH + 6.0 : radius * 2.0 + 1.0;
-            if (path.delta()) furthest = Math.max(furthest, radius + DELTA_PLAIN + 1.0);
+            if (path.delta()) furthest = Math.max(furthest + (gorgeMode ? DELTA_GORGE_FLATS : 0.0), radius + DELTA_PLAIN + 1.0);
             if (path.fractal().boxDistanceSq(x, z) < furthest * furthest) return true;
         }
         return false;
@@ -2769,7 +3581,7 @@ public class HydrologyManager {
         result.distanceFromCenter = Double.MAX_VALUE;
         result.channelWidth = 0.0;
 
-        int mountainTargetY = 320;
+        int mountainTargetY = skyY;
         int mountainWaterLevel = Integer.MAX_VALUE;
 
         int mountainWetLevel = Integer.MAX_VALUE;
@@ -2803,6 +3615,12 @@ public class HydrologyManager {
                     : NO_MOUNTAIN_RIVER;
 
             final boolean gorgeMode = !Config.NORMAL_RIVER_TUNNELS.get();
+
+            final boolean valleys = gorgeMode && com.AdamNew.dynamicwaters.terrain.LowlandCut.anyValley();
+            final boolean cutTunnels = gorgeMode && com.AdamNew.dynamicwaters.terrain.LowlandCut.anyTunnel();
+            final double[] cutShares = new double[2];
+
+            final boolean beaches = Config.RIVER_BEACHES.get();
             final double[] onRiver = new double[2];
 
             java.util.List<com.AdamNew.dynamicwaters.river.RiverGraphEdge> nearbyRivers = com.AdamNew.dynamicwaters.MainRivers
@@ -2811,6 +3629,10 @@ public class HydrologyManager {
             double ragged = Double.NaN;
 
             int splitTop = Integer.MAX_VALUE, splitBed = Integer.MIN_VALUE;
+
+            double fordDrop = Double.POSITIVE_INFINITY;
+            double fordRock = Double.NEGATIVE_INFINITY;
+            final double[] fordRockHere = new double[1];
             for (com.AdamNew.dynamicwaters.river.RiverGraphEdge path : nearbyRivers) {
                 double maxRadius = waterRadiusAt(path, x, z);
                 if (path.delta()) {
@@ -2818,8 +3640,12 @@ public class HydrologyManager {
                     maxRadius *= ragged;
                 }
 
-                double furthest = gorgeMode ? maxRadius + GORGE_REACH + GORGE_ROUGH + 6.0 : maxRadius * 2.0 + 1.0;
-                if (path.delta()) furthest = Math.max(furthest, maxRadius + DELTA_PLAIN + 1.0);
+                final boolean valleyHere = valleys && !path.delta();
+                double furthest = valleyHere ? maxRadius + VALLEY_REACH + VALLEY_WARP + 1.0
+                        : gorgeMode ? maxRadius + GORGE_REACH + GORGE_ROUGH + 6.0 : maxRadius * 2.0 + 1.0;
+                if (path.delta()) {
+                    furthest = Math.max(furthest + (gorgeMode ? DELTA_GORGE_FLATS : 0.0), maxRadius + DELTA_PLAIN + 1.0);
+                }
                 if (path.fractal().boxDistanceSq(x, z) >= furthest * furthest) continue;
                 double rawDistance = Math.sqrt(gorgeMode ? path.fractal().nearestPoint(x, z, onRiver)
                         : path.fractal().intersectDistance(x, z));
@@ -2871,17 +3697,40 @@ public class HydrologyManager {
 
                 double gorge = 0.0;
                 double gorgeDepth = 0.0;
-                final double gorgeReach = waterRadius + GORGE_REACH + GORGE_ROUGH + 3.0;
-                if (gorgeMode && rawDistance < gorgeReach && !path.delta()) {
-                    final double riverGround = generator != null && randomState != null
-                            ? coarseGroundAt(onRiver[0], onRiver[1], generator, randomState)
-                            : originalY;
-                    final double t = Mth.clamp((riverGround - GORGE_FROM) / GORGE_RAMP, 0.0, 1.0);
-                    gorge = t * t * (3.0 - 2.0 * t);
+                final double gorgeReach = waterRadius + GORGE_REACH + GORGE_ROUGH + 3.0 + (path.delta() ? DELTA_GORGE_FLATS : 0.0);
 
-                    gorgeDepth = Math.max(8.0, (riverGround - (seaLevel - 1)) * 1.1 + 6.0);
+                double valleyShare = 0.0, tunnelShare = 0.0;
+                double riverGround = Double.NaN;
+                if ((valleyHere || cutTunnels) && !path.delta()) {
+                    if (com.AdamNew.dynamicwaters.terrain.LowlandCut.allValley()) {
+                        valleyShare = 1.0;
+                    } else {
+                        riverGround = generator != null && randomState != null
+                                ? coarseGroundAt(onRiver[0], onRiver[1], generator, randomState)
+                                : originalY;
+                        cutSharesAt(path, x, z, onRiver[0], onRiver[1], riverGround, generator, randomState, cutShares);
+                        valleyShare = cutShares[0];
+                        tunnelShare = cutShares[1];
+                    }
                 }
-                final boolean inReach = rawDistance < (path.delta() ? maxRadius + DELTA_PLAIN : maxRadius * 2.0);
+                final boolean valley = valleyShare > 0.0;
+                if (gorgeMode && valleyShare + tunnelShare < 1.0 && rawDistance < gorgeReach) {
+                    if (Double.isNaN(riverGround)) {
+                        riverGround = generator != null && randomState != null
+                                ? coarseGroundAt(onRiver[0], onRiver[1], generator, randomState)
+                                : originalY;
+                    }
+
+                    final double gorgeGround = path.delta() ? Math.max(riverGround, originalY) : riverGround;
+                    final double t = Mth.clamp((gorgeGround - GORGE_FROM) / GORGE_RAMP, 0.0, 1.0);
+                    gorge = t * t * (3.0 - 2.0 * t) * (1.0 - valleyShare - tunnelShare);
+
+                    gorgeDepth = Math.max(8.0, (gorgeGround - (seaLevel - 1)) * 1.1 + 6.0);
+                }
+                final boolean inReach = rawDistance < (path.delta() ? maxRadius + DELTA_PLAIN
+                        : valley ? maxRadius + VALLEY_REACH + VALLEY_WARP
+                        : gorgeMode ? maxRadius + Math.max(maxRadius, bankMeet(maxRadius) + OPEN_BANK_MEET_MARGIN)
+                        : maxRadius * 2.0);
                 if (!inReach && !(gorge > 0.0 && rawDistance < gorgeReach)) {
                     continue;
                 }
@@ -2890,10 +3739,11 @@ public class HydrologyManager {
                 double baselineY = seaLevel - 1;
                 double heightDiffForWidth = originalY - baselineY;
                 double widthFactor = Math.min(1.0, Math.max(0.0, (heightDiffForWidth - 3.0) / 10.0));
-                double tunnelFactor = gorgeMode ? 0.0
+
+                double tunnelFactor = gorgeMode ? tunnelShare
                         : Math.min(1.0, Math.max(0.0, (originalY - Config.NORMAL_RIVER_CANYON_HEIGHT.get()) / 8.0));
 
-                final double split = gorgeMode && rawDistance < waterRadius && riverSplits(path)
+                final double split = gorgeMode && tunnelShare < 0.5 && rawDistance < waterRadius && riverSplits(path)
                         ? riverSplitDepth(path, x, z, maxRadius) : RIVER_SPLIT_NONE;
 
                 if (!gorgeMode && mCtx.bestPath != null) {
@@ -2960,6 +3810,13 @@ public class HydrologyManager {
 
                 if (path.delta()) targetBankWidth = Math.max(targetBankWidth, DELTA_PLAIN);
 
+                if (valley) targetBankWidth = VALLEY_REACH + VALLEY_WARP;
+
+                if (gorgeMode && valleyShare < 1.0 && !path.delta() && tunnelFactor <= 0.0
+                        && (mCtx.bestPath == null || mCtx.distance > mCtx.width + GORGE_HOLD + OPEN_BANK_STREAM_CLEAR)) {
+                    targetBankWidth = Math.max(targetBankWidth, Math.min(bankMeet(canyonRadius), hDiff / BANK_TALUS) + 1.0);
+                }
+
                 final double edgeOut = distance - canyonRadius + HEAD_CLOSE * pastTip;
                 final boolean inCanyon = inReach && (edgeOut < targetBankWidth || edgeOut < 0.0);
                 if (inCanyon || (gorge > 0.0 && distance >= waterRadius)) {
@@ -2984,22 +3841,41 @@ public class HydrologyManager {
                         result.channelWidth = canyonRadius;
                         result.waterRadius = waterRadius;
                     }
+                    if (waterRadius > 0.0) result.waterEdge = Math.min(result.waterEdge, distance - waterRadius);
 
                     int absoluteRoofY = (int) Math.floor(baselineY + H * arch);
 
                     if (gorge > 0.0) {
-                        absoluteRoofY = inCanyon ? (int) Math.round(absoluteRoofY + (320 - absoluteRoofY) * gorge) : 320;
+                        absoluteRoofY = inCanyon ? (int) Math.round(absoluteRoofY + (skyY - absoluteRoofY) * gorge) : skyY;
                     }
 
+                    if (valleyShare >= 0.5 || path.delta()) absoluteRoofY = skyY;
+
                     if (split > 0.0 && originalY >= seaLevel - 1) {
-                        final int top = Math.min(originalY,
-                                seaLevel - 1 + Math.min(RIVER_SPLIT_TOP, (int) (split * RIVER_SPLIT_RISE)));
+                        final boolean gravelBar = beaches && grassyStretch(path);
+                        final int top = Math.min(originalY, seaLevel - 1 + (gravelBar ? (split >= GRAVEL_BAR_HUMP ? 1 : 0)
+                                : Math.min(RIVER_SPLIT_TOP, (int) (split * RIVER_SPLIT_RISE))));
                         splitTop = Math.min(splitTop, top);
                         result.modifies = true;
                         result.cavernRoofY = Math.max(result.cavernRoofY, absoluteRoofY);
                         result.skinLevel = Math.max(result.skinLevel, seaLevel - 1);
                         result.sealFloorY = Math.min(result.sealFloorY, top - 3);
-                        if (split < RIVER_SPLIT_BAR) result.pointBar = true;
+                        if (gravelBar) {
+                            result.gravelBar = true;
+                            result.pointBar = true;
+                        }
+
+                        double bars = RIVER_SPLIT_BAR;
+                        if (beaches && !gravelBar && !path.delta() && tunnelFactor < 0.5) {
+                            final double shore = beachWidth(x, z);
+                            bars = Math.min(bars, shore);
+                            final byte b = split < BEACH_EDGE_OUT ? BEACH_EDGE : split < shore ? BEACH_SHORE
+                                    : split < shore + BEACH_RIM ? BEACH_TOP : 0;
+                            if (b != 0 && (result.beach == 0 || result.beach == BEACH_TOP || result.beach == BEACH_DEEP)) {
+                                result.beach = b;
+                            }
+                        }
+                        if (split < bars) result.pointBar = true;
                         if (top < originalY - 1) result.dressCut = true;
                     } else if (distance < waterRadius) {
                         result.isMainRiverWater = true;
@@ -3020,11 +3896,17 @@ public class HydrologyManager {
                         double clampedFloorNoise = floorNoise * Math.max(0.0, 1.0 - tBed * 2.0);
 
                         double bowl = Math.min(NORMAL_RIVER_DEPTH, HEAD_DEPTH_PER_RADIUS * waterRadius)
-                                * (1.0 - tBed * tBed);
+                                * RIVER_SCALE.lowlandDepth() * (1.0 - tBed * tBed);
                         double riverHeight = (seaLevel - 1) - bowl + clampedFloorNoise;
                         int localTargetY = (int) Math.floor(Math.min(riverHeight, originalY));
 
-                        splitBed = Math.max(splitBed, (int) Math.floor(seaLevel - 2 + Math.min(0.0, split) * RIVER_SPLIT_SHOAL));
+                        if (!path.delta() && tunnelFactor < 0.5 && split <= 0.0 && Config.RIVER_FORDS.get()) {
+                            fordDrop = Math.min(fordDrop, RiverFords.shallow(path, x, z, waterRadius, fordRockHere));
+                            fordRock = Math.max(fordRock, fordRockHere[0]);
+                        }
+
+                        splitBed = Math.max(splitBed, Math.min(seaLevel - 2, (int) Math.floor(seaLevel - 1
+                                + Math.min(0.0, split) * RIVER_SPLIT_SHOAL * Math.max(1.0, RIVER_SCALE.lowlandDepth()))));
 
                         if (absoluteRoofY < originalY - 2 && tunnelFactor > 0.8 && Config.NORMAL_TUNNEL_FORMATIONS.get()) {
                             double sNoise = SPELEOTHEM_NOISE.getValue(x * 0.4, z * 0.4);
@@ -3037,16 +3919,64 @@ public class HydrologyManager {
                         result.targetY = Math.min(result.targetY, localTargetY);
                         result.cavernRoofY = Math.max(result.cavernRoofY, absoluteRoofY);
 
+                        if (beaches && !path.delta() && tunnelFactor < 0.5 && split <= 0.0) {
+                            if (waterRadius - distance < BEACH_BED_IN || split > -BEACH_BED_IN) {
+                                if (result.beach == 0 || result.beach == BEACH_DEEP) result.beach = BEACH_BED;
+                            } else if (result.beach == 0) {
+                                result.beach = BEACH_DEEP;
+                            }
+                        }
+
                         result.skinLevel = Math.max(result.skinLevel, seaLevel - 1);
                     } else {
                         if ((inCanyon && targetBankWidth > 0.0) || gorge > 0.0) {
                             int slopeY = originalY;
+
+                            int bankBase = originalY;
                             if (inCanyon && targetBankWidth > 0.0) {
                                 final double dOut = Math.max(0.0, edgeOut);
-                                final double bankReach = path.delta() ? DELTA_PLAIN : bankMeet(canyonRadius);
-                                final double talus = path.delta() ? DELTA_PLAIN_SLOPE : BANK_TALUS;
-                                slopeY = (int) Math.floor(baselineY
-                                        + ChannelForm.bankRise(dOut, originalY - baselineY, bankReach, talus));
+
+                                int valleyY = originalY, bankY = originalY;
+                                if (valley) {
+                                    final double valleyOut = Math.max(0.0, rawDistance - maxRadius);
+
+                                    final double climbOver = (generator != null && randomState != null
+                                            ? coarseGroundAt(x, z, generator, randomState) : originalY) - baselineY;
+                                    final double rise = valleyRise(x, z, valleyOut, maxRadius, originalY - baselineY, climbOver);
+                                    valleyY = rise == Double.MAX_VALUE ? originalY : (int) Math.floor(baselineY + rise);
+
+                                    int hold = Integer.MIN_VALUE;
+
+                                    if (mCtx.bestPath != null && valleyStreamLevel(mCtx) > seaLevel - 1) {
+                                        hold = (int) Math.floor(valleyStreamLevel(mCtx) + 1
+                                                - Math.max(0.0, mCtx.distance - mCtx.width - VALLEY_SPUR_HOLD) * VALLEY_SPUR);
+                                        if (hold > valleyY && atRavineRim(mCtx, seaLevel, generator, level, randomState)) {
+                                            hold = Integer.MIN_VALUE;
+                                        }
+                                    }
+                                    if (columnLake != null && laysLake(columnLake, seaLevel) && columnLake.covers(x, z)) {
+                                        hold = Math.max(hold, columnLake.waterY + 1);
+                                    }
+                                    valleyY = Math.min(originalY, Math.max(valleyY, hold));
+                                }
+                                if (valleyShare < 1.0) {
+                                    final double bankReach = path.delta() ? DELTA_PLAIN : bankMeet(canyonRadius);
+                                    final double talus = path.delta() ? DELTA_PLAIN_SLOPE : BANK_TALUS;
+                                    bankY = Math.min(originalY, (int) Math.floor(baselineY
+                                            + ChannelForm.bankRise(dOut, originalY - baselineY, bankReach, talus)));
+                                }
+                                slopeY = valleyShare >= 1.0 ? valleyY : valleyShare <= 0.0 ? bankY
+                                        : (int) Math.round(bankY + (valleyY - bankY) * valleyShare);
+                                bankBase = bankY;
+
+                                if (valley && slopeY < originalY) result.gorgeSeal = true;
+
+                                if (valley && !result.gorgeSeal) {
+                                    final double behind = valleyRise(x, z, Math.max(0.0, rawDistance - maxRadius - GORGE_SEAL),
+                                            maxRadius, originalY - baselineY, (generator != null && randomState != null
+                                                    ? coarseGroundAt(x, z, generator, randomState) : originalY) - baselineY);
+                                    if (behind != Double.MAX_VALUE && baselineY + behind < originalY) result.gorgeSeal = true;
+                                }
 
                                 if (tunnelLedge > 0 && tunnelFactor > 0.8) {
                                     final double s = Math.min(1.0, dOut / targetBankWidth);
@@ -3061,14 +3991,30 @@ public class HydrologyManager {
                                     result.deltaShore = Math.min(result.deltaShore, dOut);
                                 }
                             }
+
+                            final boolean shoreHere = beaches && !path.delta() && tunnelFactor < 0.5 && split <= 0.0
+                                    && columnLake == null && waterRadius >= BEACH_WATER_MIN
+                                    && (mCtx.bestPath == null || mCtx.distance > mCtx.width + GORGE_HOLD + 2.0
+                                            || mCtx.bestY <= seaLevel - 1);
+                            final double shore = shoreHere ? beachWidth(x, z) : 0.0;
                             if (gorge > 0.0) {
-                                final double wallOut = (distance - waterRadius + HEAD_CLOSE * pastTip) / headSlot;
-                                final int wallY = gorgeWallY(x, z, wallOut, originalY, seaLevel - 1, gorgeDepth);
+                                final double wallOut = (distance - waterRadius - shore + HEAD_CLOSE * pastTip) / headSlot
+                                        - (path.delta() ? DELTA_GORGE_FLATS : 0.0);
+
+                                final double wallDepth = path.delta() || generator == null || randomState == null
+                                        ? gorgeDepth
+                                        : gorgeClimb(gorgeDepth, coarseGroundAt(x, z, generator, randomState), seaLevel - 1);
+                                final int wallY = gorgeWallY(x, z, Math.max(0.0, wallOut), originalY, seaLevel - 1, wallDepth);
                                 final boolean steep = GORGE_PROFILE.get().lastSteep;
-                                slopeY = (int) Math.round(slopeY + (wallY - slopeY) * gorge);
+
+                                final int gorgeY = path.delta() ? Math.min(wallY, slopeY) : wallY;
+
+                                slopeY = valleyShare > 0.0 && valleyShare < 1.0 && !path.delta()
+                                        ? (int) Math.round(slopeY + (gorgeY - bankBase) * gorge)
+                                        : (int) Math.round(slopeY + (gorgeY - slopeY) * gorge);
 
                                 int hold = Integer.MIN_VALUE;
-                                if (mCtx.bestPath != null && mCtx.distance < mCtx.width + GORGE_HOLD
+                                if (mCtx.bestPath != null && mCtx.distance < mCtx.width + GORGE_HOLD && mCtx.bestY > seaLevel - 1
                                         && !atRavineRim(mCtx, seaLevel, generator, level, randomState)) {
                                     hold = mCtx.bestY + 1;
                                 }
@@ -3082,17 +4028,36 @@ public class HydrologyManager {
                                         result.gorgeWall = true;
                                         result.gorgeSeal = true;
                                     } else if (gorgeWallY(x, z, wallOut - GORGE_SEAL, originalY,
-                                            seaLevel - 1, gorgeDepth) < originalY) {
+                                            seaLevel - 1, wallDepth) < originalY) {
                                         result.gorgeSeal = true;
                                     }
                                 }
                             }
 
-                            if (inCanyon || slopeY < originalY) {
+                            final double shoreOut = distance - waterRadius;
+                            if (shoreHere && slopeY >= seaLevel - 1 && originalY >= seaLevel - 1) {
+                                if (shoreOut < shore) {
+                                    slopeY = seaLevel - 1;
+                                    result.beach = shoreOut < BEACH_EDGE_OUT ? BEACH_EDGE : BEACH_SHORE;
+                                } else {
+                                    if (shoreOut < shore + BEACH_STEPS && gorge < 0.5) {
+                                        slopeY = Math.min(slopeY, seaLevel + (int) Math.floor(shoreOut - shore));
+                                    }
+                                    if (shoreOut < shore + BEACH_RIM && slopeY <= seaLevel - 1 + BEACH_RIM_RISE
+                                            && result.beach == 0) {
+                                        result.beach = BEACH_TOP;
+                                    }
+                                }
+                            }
+
+                            if (valleyShare >= 0.5 ? slopeY < originalY : inCanyon || slopeY < originalY) {
                                 result.modifies = true;
                                 result.targetY = Math.min(result.targetY, slopeY);
                                 result.cavernRoofY = Math.max(result.cavernRoofY, absoluteRoofY);
-                                result.skinLevel = Math.max(result.skinLevel, seaLevel - 1);
+
+                                if (valleyShare < 0.5 || shoreOut < VALLEY_SKIN) {
+                                    result.skinLevel = Math.max(result.skinLevel, seaLevel - 1);
+                                }
 
                                 if (slopeY < originalY - 1 && !(tunnelLedge > 0 && tunnelFactor > 0.8)) result.dressCut = true;
 
@@ -3115,12 +4080,29 @@ public class HydrologyManager {
                 result.targetY = Math.min(splitBed, originalY);
                 if (splitBed >= seaLevel - 3) result.pointBar = true;
             }
+            if (fordDrop < Double.POSITIVE_INFINITY && result.isMainRiverWater && !result.riverSplit && result.targetY < seaLevel - 1) {
+                result.targetY = Math.min(originalY, Math.max(result.targetY, (int) Math.round(seaLevel - 2 - fordDrop)));
+                if (fordRock > Double.NEGATIVE_INFINITY) {
+                    final int top = (int) Math.round(seaLevel - 1 + fordRock);
+                    if (top > result.targetY) result.fordRock = top;
+                }
+            }
+
+            if (Config.OXBOW_LAKES.get() && !result.isMainRiverWater && !result.riverSplit && !nearbyRivers.isEmpty()) {
+                RiverOxbows.carve(result, nearbyRivers, x, z, originalY, seaLevel, generator, randomState);
+            }
+
+            if (beaches && fordDrop == Double.POSITIVE_INFINITY && columnLake == null) {
+                com.AdamNew.dynamicwaters.shore.RiverBeach.ragged(result, x, z, originalY, seaLevel,
+                        randomState != null ? randomState : getGlobalRandomState());
+            }
         }
         if (!whole) return result;
         WatershedStats.lowlandPassNanos.add(System.nanoTime() - lowlandStart);
 
-        final boolean columnInLake = columnLake != null && columnLake.bedColumn(originalY)
-                && columnLake.inside(x, z);
+        final boolean columnInLake = columnLake != null && columnLake.inside(x, z)
+                && (columnLake.bedColumn(originalY) || originalY < columnLake.waterY
+                        && columnLake.shoreDistance(Mth.floor(x), Mth.floor(z)) >= LAKE_HOLE_INSET);
 
         final boolean columnInShore = columnLake != null && !columnInLake
                 && originalY < columnLake.waterY
@@ -3130,8 +4112,9 @@ public class HydrologyManager {
                 && !lakeDrainsHere(columnLake, x, z, generator, randomState);
 
         final boolean lakeWater = columnInLake
-                || (columnLake != null && columnLake.holdsColumn(originalY) && columnLake.touchesInside(x, z))
-                || columnInShore;
+                || ((columnLake != null && columnLake.holdsColumn(originalY) && columnLake.touchesInside(x, z))
+                        || columnInShore)
+                && !lakeRimBeside(columnLake, Mth.floor(x), Mth.floor(z), generator, randomState);
 
         WatershedLake hollowLake = null;
         LakeHollows.Kind hollow = LakeHollows.Kind.NONE;
@@ -3175,13 +4158,15 @@ public class HydrologyManager {
 
                         if (feedsDelta(mountainPath, generator, level, randomState)) continue;
 
-                        if (!Config.NORMAL_RIVER_TUNNELS.get() && leftDry(mountainPath, seaLevel, generator, level, randomState)) continue;
+                        final boolean rims = !Config.NORMAL_RIVER_TUNNELS.get()
+                                && cutGorgeAt(mountainPath.segmentsX[0], mountainPath.segmentsZ[0], generator, randomState) >= 0.5;
+                        if (rims && leftDry(mountainPath, seaLevel, generator, level, randomState)) continue;
 
-                        final boolean overRim = !Config.NORMAL_RIVER_TUNNELS.get() && !result.isMainRiverWater
+                        final boolean overRim = rims && !result.isMainRiverWater
                                 && entersGorge(mountainPath, seaLevel, generator, level, randomState);
                         final Ravine ravine = overRim ? ravineOf(mountainPath, seaLevel, generator, level, randomState) : null;
 
-                        final Ravine fed = ravine == null && !Config.NORMAL_RIVER_TUNNELS.get() && !result.isMainRiverWater
+                        final Ravine fed = ravine == null && rims && !result.isMainRiverWater
                                 ? feederRavine(mountainPath, seaLevel, generator, level, randomState) : null;
                         if (fed != null) {
                             final double ox = x - fed.px, oz = z - fed.pz;
@@ -3218,7 +4203,13 @@ public class HydrologyManager {
                                 boolean cut = false;
                                 final double u = Math.min(1.0, across / ravine.width);
                                 final int bowl = Mth.clamp(
-                                        (int) Math.round(STREAM_DEPTH_RATIO * ravine.width * (1.0 - u * u)), 1, MAX_BOWL);
+                                        (int) Math.round(STREAM_DEPTH_RATIO * ravine.width * RIVER_SCALE.mountainDepth()
+                                                * (1.0 - u * u)), 1, maxBowl());
+
+                                if (inPool && w - bowl > groundBefore) {
+                                    final int fallen = ravine.fallenLevel(x, z, along, groundBefore, bowl);
+                                    if (fallen != Integer.MIN_VALUE) w = fallen;
+                                }
                                 if (inPool && w - bowl <= groundBefore) {
                                     isMountainWater = true;
                                     result.isWatershedWall = false;
@@ -3246,8 +4237,15 @@ public class HydrologyManager {
                                     result.modifies = true;
                                     result.isWatershed = true;
                                     result.isMountainRiver = true;
-                                    result.cavernRoofY = 320;
+                                    result.cavernRoofY = skyY;
                                     mountainAnyLevel = Math.max(mountainAnyLevel, w);
+                                }
+                            } else if (along < 0.0 && along > -RAVINE_SIDE && across < ravine.width + RAVINE_SIDE) {
+                                final double out = Math.hypot(Math.max(0.0, across - ravine.width), along);
+                                if (out < RAVINE_SIDE) {
+                                    final double noise = RIVER_BED_NOISE.getValue(x * 0.15, z * 0.15) * 1.5;
+                                    ravineSide = Math.min(ravineSide, Mth.floor(ravine.sideLine(0.0)) + 1
+                                            + Math.max(0, Mth.floor(out * RAVINE_GRADE + noise)));
                                 }
                             }
 
@@ -3335,7 +4333,13 @@ public class HydrologyManager {
                         if (data.beyondEnd && (data.distance >= chanW || channelBowl(data, chanW) == 0)
                                 && data.distance < chanW + Math.max(reach, RAVINE_NEAR)
                                 && (capYields(mountainPath, data, x, z, colX, colZ, homeRx, homeRz, generator, level, randomState)
-                                || capGoesOn(mountainPath, x, z, colX, colZ, homeRx, homeRz, generator, level, randomState))) {
+                                || capGoesOn(mountainPath, x, z, colX, colZ, homeRx, homeRz, Integer.MIN_VALUE, generator,
+                                        level, randomState))) {
+                            continue;
+                        }
+
+                        if (data.beyondEnd && data.distance < chanW && capGoesOn(mountainPath, x, z, colX, colZ,
+                                homeRx, homeRz, data.y, generator, level, randomState)) {
                             continue;
                         }
 
@@ -3350,6 +4354,13 @@ public class HydrologyManager {
                             result.isWatershed = true;
                             result.isMountainRiver = true;
 
+                            if (!tunnel && ravine == null && !atLakeLevel && !columnIsLakeWater
+                                    && data.distance - chanW < result.mountainEdge) {
+                                result.mountainEdge = data.distance - chanW;
+                                result.mountainEdgeY = data.y;
+                                result.mountainEdgeSlope = data.slope;
+                            }
+
                             if (data.distance < chanW) {
                                 isMountainWater = true;
                                 result.isWatershedWall = false;
@@ -3357,6 +4368,24 @@ public class HydrologyManager {
                                 final double lat = Mth.clamp(data.lateral / chanW, -1.0, 1.0);
                                 final double skew = ChannelForm.bendSkew(data.curvature, chanW);
                                 int bowl = channelBowl(data, chanW);
+
+                                double lipAhead = fallLipAhead(mountainPath, data, x, z);
+
+                                if (data.along < 2.0) {
+                                    final boolean falls = mouthFalls(mountainPath, seaLevel, generator, level, randomState);
+                                    if (mountainPath.hitMainRiver) {
+                                        if (falls && result.waterEdge != Double.MAX_VALUE) {
+                                            lipAhead = Math.min(lipAhead, Math.max(0.0, result.waterEdge));
+                                        }
+                                    } else if (mountainPath.mouthInto != null) {
+                                        final WatershedPath.RiverNodeData d = mountainPath.mouthInto.getClosestNodeData(x, z);
+                                        lipAhead = Math.min(lipAhead, fallLipAhead(mountainPath.mouthInto, d, x, z));
+                                        if (falls) lipAhead = Math.min(lipAhead, Math.max(0.0, d.distance - channelFullWidth(d, x, z)));
+                                    }
+                                }
+                                if (lipAhead < FALL_LIP_RUN) {
+                                    bowl = Math.min(bowl, FALL_LIP_DEPTH + (int) Math.floor(lipAhead * FALL_LIP_DEEPEN));
+                                }
 
                                 if (!columnInLake && !atLakeLevel && ChannelForm.onBar(lat, skew)) {
                                     result.pointBar = true;
@@ -3373,13 +4402,25 @@ public class HydrologyManager {
                                 int targetWaterLevel = data.y;
 
                                 if (isNearOutlet && !result.isMainRiverWater && !atRim && ravine == null) {
-                                    int outletY = mountainPath.segmentsY[0];
-                                    if (outletY < targetWaterLevel) {
-                                        double blend = distToOutlet / 24.0;
-                                        targetWaterLevel = (int) Math
-                                                .floor(outletY + blend * (targetWaterLevel - outletY));
+                                    final int eased = outletEased(mountainPath, data, targetWaterLevel);
+                                    if (eased < targetWaterLevel) {
+                                        targetWaterLevel = eased;
                                         if (!columnInLake) {
                                             localTargetY = targetWaterLevel - bowl;
+                                        }
+                                    }
+                                }
+
+                                if (data.along < 3.0 && !mountainPath.hitMainRiver) {
+                                    mouthFalls(mountainPath, seaLevel, generator, level, randomState);
+                                    final WatershedPath down = mountainPath.mouthInto;
+                                    final WatershedPath.RiverNodeData past = down == null ? null
+                                            : down.belowFace(x, z, mountainPath.segmentsX[0], mountainPath.segmentsZ[0]);
+                                    if (past != null) {
+                                        final int below = result.isMainRiverWater ? past.y : outletEased(down, past, past.y);
+                                        if (below < targetWaterLevel) {
+                                            targetWaterLevel = below;
+                                            if (!columnInLake) localTargetY = Math.min(localTargetY, below - bowl);
                                         }
                                     }
                                 }
@@ -3415,7 +4456,7 @@ public class HydrologyManager {
                                             vaultTop(mountainPath, data, vaultR, vaultH, groundBefore));
                                     vaultPaths++;
                                 } else {
-                                    result.cavernRoofY = 320;
+                                    result.cavernRoofY = skyY;
                                 }
 
                                 if (data.distance < result.distanceFromCenter) {
@@ -3522,33 +4563,45 @@ public class HydrologyManager {
 
                                         finalTargetY = bermTop;
                                     } else {
+                                        final int cutInto = Math.min(originalY, Math.max(data.y, groundBefore));
                                         int bankTop = (int) Math.floor(data.y
-                                                + ChannelForm.bankRise(dOut, originalY - data.y, bankWidth, BANK_TALUS) + wallNoise);
+                                                + ChannelForm.bankRise(dOut, cutInto - data.y, bankWidth, BANK_TALUS) + wallNoise);
 
-                                        if (originalY <= seaLevel + 1 && bankTop < seaLevel + 1) {
+                                        if (cutInto <= seaLevel + 1 && bankTop < seaLevel + 1) {
                                             bankTop = Math.max(bankTop, seaLevel + 1);
                                         }
 
                                         final int maxCut = (int) Math.round(MAX_BANK_CUT * (1.0 - tOut));
                                         final int steepest = (int) Math.floor(data.y + STEEP_BANK_TALUS * dOut + wallNoise);
-                                        bankTop = Math.max(bankTop, Math.min(originalY - maxCut, steepest));
+                                        bankTop = Math.max(bankTop, Math.min(cutInto - maxCut, steepest));
 
                                         if (columnLake != null && data.y < columnLake.waterY
                                                 && columnLake.covers(x, z)) {
                                             bankTop = Math.max(bankTop, columnLake.waterY + 1);
                                         }
                                         bankTop = Math.max((int) data.y,
-                                                Math.min(bankTop, Math.max((int) data.y, originalY)));
+                                                Math.min(bankTop, Math.max((int) data.y, cutInto)));
 
                                         if (data.bankFloor != Integer.MIN_VALUE) {
-                                            bankTop = Math.max(bankTop, Math.min(originalY,
+                                            bankTop = Math.max(bankTop, Math.min(cutInto,
                                                     data.bankFloor - (int) Math.floor(Math.max(0.0, dOut - 1.0) * LEVEE_TALUS)));
                                         }
 
                                         if (dOut > bankWidth) {
                                             double tOuter = Math.min(1.0, (dOut - bankWidth) / extraReach);
                                             double outerBlend = tOuter * tOuter * (3.0 - 2.0 * tOuter);
-                                            bankTop = (int) Math.floor(bankTop + outerBlend * (originalY - bankTop));
+                                            bankTop = (int) Math.floor(bankTop + outerBlend * (cutInto - bankTop));
+                                        }
+
+                                        if (data.y <= seaLevel - 1 && data.bankFloor == Integer.MIN_VALUE
+                                                && Config.RIVER_BEACHES.get()
+                                                && !(columnLake != null && columnLake.covers(x, z))) {
+                                            final double shore = beachWidth(x, z);
+                                            if (dOut < shore) {
+                                                bankTop = Math.min(bankTop, data.y);
+                                            } else if (dOut < shore + BEACH_STEPS) {
+                                                bankTop = Math.min(bankTop, data.y + 1 + (int) Math.floor(dOut - shore));
+                                            }
                                         }
 
                                         finalTargetY = bankTop;
@@ -3576,7 +4629,7 @@ public class HydrologyManager {
                                         result.isWatershedWall = true;
                                         result.wallTopY = Math.max(result.wallTopY, finalTargetY);
                                     }
-                                    result.cavernRoofY = 320;
+                                    result.cavernRoofY = skyY;
                                 }
 
                                 result.sealFloorY = Math.min(result.sealFloorY,
@@ -3590,10 +4643,14 @@ public class HydrologyManager {
 
         if (ravineSide != Integer.MAX_VALUE) {
             final int top = Math.max(Math.max(ravineSide, ravineHold), riverRim + 1);
+            if (labCarveHere(Mth.floor(x), Mth.floor(z))) {
+                com.mojang.logging.LogUtils.getLogger().info("[labRavine] {} {} side {} hold {} rim {} groundBefore {} top {} target {}", x, z, ravineSide,
+                        ravineHold, riverRim, groundBefore, top, result.targetY);
+            }
             if (top < groundBefore) {
                 if (result.targetY >= originalY || top < result.targetY) result.targetY = top;
                 result.modifies = true;
-                result.cavernRoofY = 320;
+                result.cavernRoofY = skyY;
                 result.gorgeWall = true;
                 result.gorgeSteep = false;
                 result.gorgeSeal = true;
@@ -3601,7 +4658,7 @@ public class HydrologyManager {
             } else if (ravineHold > groundBefore && ravineHold - groundBefore <= RAVINE_RIM_BUILD && !isMountainWater) {
                 result.targetY = Math.max(result.targetY, ravineHold);
                 result.modifies = true;
-                result.cavernRoofY = 320;
+                result.cavernRoofY = skyY;
                 result.isWatershed = true;
                 result.isWatershedWall = true;
                 result.wallTopY = Math.max(result.wallTopY, ravineHold);
@@ -3618,10 +4675,10 @@ public class HydrologyManager {
             result.isWatershedWall = true;
             result.wallTopY = Math.max(result.wallTopY, heldFor);
             result.skinLevel = Math.max(result.skinLevel, mountainAnyLevel);
-            result.cavernRoofY = 320;
+            result.cavernRoofY = skyY;
         }
 
-        if (vaultPaths >= 2 && result.cavernRoofY > -999 && result.cavernRoofY < 320) {
+        if (vaultPaths >= 2 && result.cavernRoofY > -999 && result.cavernRoofY < skyY) {
             result.cavernRoofY += JUNCTION_CHAMBER;
         }
 
@@ -3669,7 +4726,7 @@ public class HydrologyManager {
                     result.isWatershed = true;
                     result.isLake = true;
                     result.isWatershedWall = false;
-                    result.cavernRoofY = 320;
+                    result.cavernRoofY = skyY;
 
                     final boolean channelAbove = isMountainWater && mountainWaterLevel > lakeWaterY + 1;
                     result.waterLevel = channelAbove ? Math.max(result.waterLevel, lakeWaterY) : lakeWaterY;
@@ -3697,7 +4754,7 @@ public class HydrologyManager {
                 result.targetY = Math.min(result.targetY, Math.min(originalY, lakeWaterY - 1));
                 result.waterLevel = lakeWaterY;
                 result.skinLevel = lakeWaterY;
-                result.cavernRoofY = 320;
+                result.cavernRoofY = skyY;
             } else if (originalY <= lakeWaterY && originalY >= lakeWaterY - lipDepth(lakeHere, columnLake != null,
                             hollow, x, z, originalY, generator, randomState)
                     && !isMountainWater
@@ -3709,7 +4766,7 @@ public class HydrologyManager {
                 result.targetY = Math.max(result.targetY, lakeWaterY);
                 result.wallTopY = Math.max(result.wallTopY, lakeWaterY);
                 result.skinLevel = Math.max(result.skinLevel, lakeWaterY);
-                result.cavernRoofY = 320;
+                result.cavernRoofY = skyY;
             } else if (originalY > lakeWaterY && !isMountainWater
                     && (!result.modifies || result.targetY >= originalY)
                     && lakeHere.covers(x, z)) {
@@ -3723,7 +4780,7 @@ public class HydrologyManager {
                     result.targetY = shoreTop;
                     result.wallTopY = Math.max(result.wallTopY, shoreTop);
                     result.skinLevel = Math.max(result.skinLevel, lakeWaterY);
-                    result.cavernRoofY = 320;
+                    result.cavernRoofY = skyY;
                 }
             }
         }
@@ -3775,7 +4832,8 @@ public class HydrologyManager {
         final double[] on = new double[2];
         for (com.AdamNew.dynamicwaters.river.RiverGraphEdge edge : MainRivers.riversAt(x, z)) {
             final double d = Math.sqrt(edge.fractal().nearestPoint(x, z, on));
-            if (d < flowWaterRadius(edge, on[0], on[1])) return true;
+            final double r = flowWaterRadius(edge, on[0], on[1]);
+            if (d < r) return true;
         }
         return false;
     }
@@ -3802,6 +4860,19 @@ public class HydrologyManager {
         return near;
     }
 
+    public static java.util.List<double[]> lowlandRiverPointsNear(double x, double z, double minDist, double maxDist) {
+        final java.util.List<double[]> near = new java.util.ArrayList<>();
+        for (com.AdamNew.dynamicwaters.river.RiverGraphEdge edge : MainRivers.riversAt(x, z)) {
+            if (edge.fractal().boxDistanceSq(x, z) > maxDist * maxDist) continue;
+            final double[] s = edge.fractal().segments;
+            for (int i = 0; i + 1 < s.length; i += 4) {
+                final double d = Math.hypot(s[i] - x, s[i + 1] - z);
+                if (d >= minDist && d <= maxDist) near.add(new double[] { s[i], s[i + 1] });
+            }
+        }
+        return near;
+    }
+
     private static final double FALL_OPEN = 6.0;
 
     public static boolean nearMountainFall(int x, int y, int z) {
@@ -3812,7 +4883,7 @@ public class HydrologyManager {
         final WatershedPath p = ctx.bestPath;
         if (p == null || ctx.bestNodeIndex < 0) return false;
         final double reach = ctx.width + FALL_OPEN;
-        if (ctx.distance >= reach || y < ctx.bestY - 20 || y > ctx.bestY + 2) return false;
+        if (ctx.distance >= reach) return false;
         int lo = ctx.bestY, hi = ctx.bestY;
         double s = 0.0;
         for (int i = ctx.bestNodeIndex; i > 0 && s <= reach; i--) {
@@ -3826,12 +4897,18 @@ public class HydrologyManager {
             lo = Math.min(lo, p.segmentsY[i + 1]);
             hi = Math.max(hi, p.segmentsY[i + 1]);
         }
+
+        if (y < lo - 20 || y > hi + 2) return false;
         return hi > lo;
     }
 
     private static boolean stillDelta(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge) {
-        return edge.delta() && !edge.deltaMain();
+        return edge.delta() && !edge.deltaMain() && !(edge.flareLength() > 0.0 && edge.tipLength() <= 0.0);
     }
+
+    private static final double WATER_EDGE_REACH = 8.0;
+
+    private static final double DELTA_ARM_PACE = 0.85;
 
     public static net.minecraft.world.phys.Vec3 getRiverFlow(double x, int y, double z,
             net.minecraft.world.level.Level level) {
@@ -3845,9 +4922,7 @@ public class HydrologyManager {
                     if (!flowEnabled) {
                         return net.minecraft.world.phys.Vec3.ZERO;
                     }
-                    int direction = scanState
-                            .getValue(com.AdamNew.dynamicwaters.block.FlowOverrideBlock.FLOW_DIRECTION);
-                    return com.AdamNew.dynamicwaters.block.FlowOverrideBlock.directionToVec3(direction);
+                    return com.AdamNew.dynamicwaters.block.FlowOverrideBlock.flowOf(scanState);
                 }
 
                 if (!scanState.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) {
@@ -3862,6 +4937,360 @@ public class HydrologyManager {
 
         if (!riversIn(level)) return net.minecraft.world.phys.Vec3.ZERO;
 
+        return wobble(level, x, z, LivingCurrent.apply(level, x, y, z, plannedRiverFlow(x, y, z, level)));
+    }
+
+    private static final double CURRENT_MIDDLE = 1.3;
+    private static final double CURRENT_BANK = 0.5;
+    private static final double CURRENT_BED = 0.4;
+    private static final double CURRENT_BED_DEPTH = 6.0;
+    private static final double CURRENT_BEND = 0.4;
+    private static final double PACE_LEAST = 0.75;
+    private static final double PACE_MOST = 1.6;
+    private static final double PACE_PER_SLOPE = 4.0;
+    private static final double LOWLAND_PACE_NARROW = 0.95;
+    private static final double LOWLAND_PACE_BROAD = 0.8;
+
+    private static boolean realisticCurrent() {
+        try {
+            return Config.REALISTIC_CURRENT.get();
+        } catch (IllegalStateException notLoadedYet) {
+            return false;
+        }
+    }
+
+    private static double pace(double across, double down, double bend, double inside) {
+        final double a = Mth.clamp(across, 0.0, 1.0);
+        final double d = Mth.clamp(down / CURRENT_BED_DEPTH, 0.0, 1.0);
+        final double bed = 1.0 - CURRENT_BED * d * d * (3.0 - 2.0 * d);
+        return (CURRENT_BANK + (CURRENT_MIDDLE - CURRENT_BANK) * (1.0 - a * a)) * bed
+                * (1.0 - CURRENT_BEND * Mth.clamp(bend, 0.0, 1.0) * Mth.clamp(inside, -1.0, 1.0));
+    }
+
+    private static double mountainPace(WatershedPath.RiverNodeData data, double x, int y, double z) {
+        if (!realisticCurrent() || RIVER_BED_NOISE == null) return 1.0;
+
+        final double half = Math.max(1.0, channelFullWidth(data, x, z)
+                * ChannelForm.slopeWidth(data.paceSlope) / ChannelForm.slopeWidth(data.slope));
+        final double inside = data.paceCurvature >= 0.0 ? data.lateral / half : -data.lateral / half;
+        final double fall = Mth.clamp(PACE_LEAST + PACE_PER_SLOPE * Math.abs(data.paceSlope), PACE_LEAST, PACE_MOST);
+        return fall * narrowed(data.width / half)
+                * pace(Math.abs(data.lateral) / half, 0.0, Math.abs(data.paceCurvature) * half * 1.5, inside);
+    }
+
+    private static double narrowed(double ratio) {
+        if (!(ratio > 0.0)) return 1.0;
+        return Mth.clamp(Math.pow(ratio, NARROWED_POWER), NARROWED_LEAST, NARROWED_MOST);
+    }
+
+    private static final double NARROWED_POWER = 0.7;
+    private static final double NARROWED_LEAST = 0.75;
+    private static final double NARROWED_MOST = 1.45;
+
+    private static double lowlandPace(com.AdamNew.dynamicwaters.river.RiverGraphEdge edge, double x, int y, double z,
+            double waterRadius) {
+        if (!realisticCurrent()) return 1.0;
+        final double[] on = new double[4];
+        final double dist = Math.sqrt(edge.fractal().nearestBend(x, z, on));
+        final double r = Math.max(1.0, waterRadius);
+        final double bend = Math.hypot(on[2], on[3]);
+        final double inside = bend < 1.0E-6 ? 0.0 : ((x - on[0]) * on[2] + (z - on[1]) * on[3]) / bend / r;
+        final double broad = Mth.clamp((edge.width - com.AdamNew.dynamicwaters.river.RiverGraphEdge.MIN_WIDTH)
+                / (double) (com.AdamNew.dynamicwaters.river.RiverGraphEdge.MAX_WIDTH
+                        - com.AdamNew.dynamicwaters.river.RiverGraphEdge.MIN_WIDTH), 0.0, 1.0);
+
+        final double lazy = Mth.lerp(broad, LOWLAND_PACE_NARROW, LOWLAND_PACE_BROAD)
+                * (edge.delta() && !edge.deltaMain() ? DELTA_ARM_PACE : 1.0);
+        return lazy * pace(dist / r, (WORLD_SEA_LEVEL - 1) - y, bend * r * 1.5, inside);
+    }
+
+    private static boolean configOn(java.util.function.BooleanSupplier value) {
+        try {
+            return value.getAsBoolean();
+        } catch (IllegalStateException notLoadedYet) {
+            return false;
+        }
+    }
+
+    private static final double FALL_DRAW = 14.0;
+    private static final double FALL_DRAW_BOOST = 0.9;
+
+    private static final double FALL_DRAW_MOST = 2.2;
+
+    public static final double FALL_PULL = 0.04;
+    public static final double FALL_ON = 0.3;
+
+    private static final double WATER_PUSH = 0.014;
+
+    public static boolean inWaterfall(net.minecraft.world.level.BlockGetter level, net.minecraft.core.BlockPos pos) {
+        if (!configOn(Config.WATERFALL_CURRENTS::get)) return false;
+        final net.minecraft.world.level.material.FluidState water = level.getFluidState(pos);
+        return water.is(net.minecraft.tags.FluidTags.WATER)
+                && water.hasProperty(net.minecraft.world.level.material.FlowingFluid.FALLING)
+                && water.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING);
+    }
+
+    public static net.minecraft.world.phys.Vec3 pushOf(net.minecraft.world.phys.Vec3 flow) {
+        if (!realisticCurrent()) return flow;
+        final double pace = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+        final double k = Math.min(pace, PUSH_MOST / Math.max(pace, 1.0E-6));
+        return new net.minecraft.world.phys.Vec3(flow.x * k, flow.y, flow.z * k);
+    }
+
+    private static final double PUSH_MOST = 3.0;
+
+    public static net.minecraft.world.phys.Vec3 paceMakeup(net.minecraft.world.phys.Vec3 flow) {
+        if (!realisticCurrent()) return net.minecraft.world.phys.Vec3.ZERO;
+        final double pace = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+        if (pace < 1.0E-6) return net.minecraft.world.phys.Vec3.ZERO;
+        final double k = (Math.min(pace * pace, PUSH_MOST) - 1.0) * WATER_PUSH / pace;
+        return new net.minecraft.world.phys.Vec3(flow.x * k, 0.0, flow.z * k);
+    }
+    private static final double POOL_PER_DROP = 0.8;
+    private static final double POOL_LEAST = 6.0;
+    private static final double POOL_MOST = 16.0;
+    private static final double POOL_BOIL = 0.4;
+    private static final double POOL_SPREAD = 0.6;
+    private static final double POOL_EDDY_FROM = 0.5;
+    private static final double POOL_BACK = 0.5;
+    private static final double POOL_BACK_SHARE = 0.75;
+    private static final double POOL_VEER = 0.5;
+
+    private static net.minecraft.world.phys.Vec3 waterfallCurrent(WatershedPath path, WatershedPath.RiverNodeData data,
+            double x, int y, double z, net.minecraft.world.phys.Vec3 flow) {
+        if (!configOn(Config.WATERFALL_CURRENTS::get) || flow.lengthSqr() < 1.0E-6 || data.flowDir.lengthSqr() < 1.0E-6) {
+            return flow;
+        }
+        final int[] ys = path.segmentsY;
+        final int n = path.validNodeCount;
+        final double along = data.along;
+        final int at = (int) Math.floor(along);
+        final int span = (int) Math.ceil(Math.max(FALL_DRAW, POOL_MOST) / WatershedPath.NODE_SPACING) + 1;
+
+        for (int f = Math.min(at, n - 2); f >= Math.max(0, at - span); f--) {
+            if (!WatershedPath.isFall(ys, f)) continue;
+            final double lip = f + WatershedPath.FALL_FACE_T;
+            if (along <= lip) break;
+            final double dist = (along - lip) * WatershedPath.NODE_SPACING;
+            if (dist >= FALL_DRAW) break;
+            final double k = 1.0 - dist / FALL_DRAW;
+            final double speed = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+            return flow.scale(Math.min(1.0 + FALL_DRAW_BOOST * k * Math.sqrt(k), Math.max(1.0, FALL_DRAW_MOST / speed)));
+        }
+
+        for (int f = Math.max(0, at); f <= Math.min(n - 2, at + span); f++) {
+            if (!WatershedPath.isFall(ys, f)) continue;
+            final double face = f + WatershedPath.FALL_FACE_T;
+            if (along >= face) break;
+            final double dist = (face - along) * WatershedPath.NODE_SPACING;
+            final double pool = Mth.clamp(POOL_PER_DROP * (ys[f + 1] - ys[f]), POOL_LEAST, POOL_MOST);
+            if (dist >= pool || y < ys[f] - 1) break;
+            final double u = dist / pool;
+            final double half = Math.max(1.0, RIVER_BED_NOISE != null ? channelFullWidth(data, x, z) : data.width);
+            final double lat = Mth.clamp(data.lateral / half, -1.0, 1.0);
+            final double fx = data.flowDir.x, fz = data.flowDir.z;
+            final double speed = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+
+            final double near = 1.0 - smooth01(u);
+            final double boil = speed * (1.0 + POOL_BOIL * near);
+            final double spread = POOL_SPREAD * near * lat;
+            final double ox = fx - fz * spread, oz = fz + fx * spread;
+            final double ol = Math.sqrt(ox * ox + oz * oz);
+            final double outX = ox / ol * boil, outZ = oz / ol * boil;
+
+            final double eddy = smooth01((Math.abs(lat) - POOL_EDDY_FROM) / (1.0 - POOL_EDDY_FROM))
+                    * Math.max(0.0, 1.0 - u / POOL_BACK_SHARE);
+            if (eddy <= 0.0) return new net.minecraft.world.phys.Vec3(outX, flow.y, outZ);
+            final double in = POOL_VEER * lat;
+            final double bx = -fx + fz * in, bz = -fz - fx * in;
+            final double bl = Math.sqrt(bx * bx + bz * bz);
+            final double back = speed * POOL_BACK;
+            return new net.minecraft.world.phys.Vec3(outX * (1.0 - eddy) + bx / bl * back * eddy, flow.y,
+                    outZ * (1.0 - eddy) + bz / bl * back * eddy);
+        }
+        return flow;
+    }
+
+    private static double smooth01(double t) {
+        final double c = Mth.clamp(t, 0.0, 1.0);
+        return c * c * (3.0 - 2.0 * c);
+    }
+
+    private static final double PLUME_REACH = 24.0;
+    private static final double PLUME_REACH_PER_RADIUS = 1.5;
+    private static final double PLUME_START = 0.9;
+    private static final double PLUME_SPREAD = 1.2;
+    private static final double PLUME_FAN = 0.5;
+    private static final double LAKE_DRAW = 16.0;
+
+    private static final double PLUME_STEP = 3.0;
+
+    private static final double PLUME_LEAST = 0.05;
+
+    private static boolean stillAt(net.minecraft.world.level.Level level, double x, double z, boolean lake) {
+        if (lake) return isInLake(x, z);
+        final net.minecraft.world.level.Level at = level != null ? level : drawnLevel.get();
+        return at != null && isOceanAt(at, new net.minecraft.core.BlockPos(Mth.floor(x), WORLD_SEA_LEVEL - 1, Mth.floor(z)));
+    }
+
+    private static final double PLUME_START_MOST = 1.3;
+
+    private static final ThreadLocal<boolean[]> PLUME_STARTING = ThreadLocal.withInitial(() -> new boolean[1]);
+
+    private static double plumeStart(double x, int y, double z, net.minecraft.world.level.Level level) {
+        final boolean[] starting = PLUME_STARTING.get();
+        if (starting[0]) return PLUME_START;
+        starting[0] = true;
+        try {
+            final net.minecraft.world.phys.Vec3 f = plannedRiverFlow(Math.floor(x), y, Math.floor(z), level);
+            final double s = Math.sqrt(f.x * f.x + f.z * f.z);
+            return s > 1.0E-6 ? Math.min(s, PLUME_START_MOST) : PLUME_START;
+        } finally {
+            starting[0] = false;
+        }
+    }
+
+    private static boolean riverWaterAt(net.minecraft.world.level.Level level, boolean lake,
+            com.AdamNew.dynamicwaters.river.RiverGraphEdge edge, WatershedPath path, double x, double z) {
+        if (stillAt(level, x, z, lake)) return false;
+        if (edge != null) {
+            final double[] on = new double[2];
+            return Math.sqrt(edge.fractal().nearestPoint(x, z, on)) <= waterRadiusAt(edge, on[0], on[1]);
+        }
+        final WatershedPath.RiverNodeData data = path.getClosestNodeData(x, z);
+        return data.distance <= data.width;
+    }
+
+    private static final ThreadLocal<boolean[]> SEEING = ThreadLocal.withInitial(() -> new boolean[1]);
+
+    public static net.minecraft.world.phys.Vec3 seenRiverFlow(double x, int y, double z, net.minecraft.world.level.Level level) {
+        final boolean[] seeing = SEEING.get();
+        final boolean was = seeing[0];
+        seeing[0] = true;
+        try {
+            return getRiverFlow(x, y, z, level);
+        } finally {
+            seeing[0] = was;
+        }
+    }
+
+    private static boolean inSea(net.minecraft.world.level.Level level, double x, double z) {
+        final net.minecraft.world.level.Level at = level != null ? level : drawnLevel.get();
+        return at != null && isOceanAt(at, new net.minecraft.core.BlockPos(Mth.floor(x), WORLD_SEA_LEVEL - 1, Mth.floor(z)));
+    }
+
+    private static net.minecraft.world.phys.Vec3 stillWaterFlow(double x, int y, double z,
+            net.minecraft.world.level.Level level, boolean lake) {
+        if (!configOn(Config.RIVER_PLUMES::get)) return net.minecraft.world.phys.Vec3.ZERO;
+
+        if (level == null || SEEING.get()[0]) return net.minecraft.world.phys.Vec3.ZERO;
+
+        double fx = 0.0, fz = 0.0, d = Double.MAX_VALUE, radius = 0.0, ox = 0.0, oz = 0.0, near = Double.MAX_VALUE;
+        com.AdamNew.dynamicwaters.river.RiverGraphEdge edge = null;
+        WatershedPath path = null;
+        if (y >= WORLD_SEA_LEVEL - 6 && y <= WORLD_SEA_LEVEL + 1) {
+            final com.AdamNew.dynamicwaters.river.RiverContext ctx = MainRivers.findNearest(x, z, getGlobalGenerator(),
+                    getDummyAccessor(), getGlobalRandomState());
+            if (ctx != null && !stillDelta(ctx.edge())) {
+                final double[] on = new double[2];
+                final double dist = Math.sqrt(ctx.edge().fractal().nearestPoint(x, z, on));
+                final net.minecraft.world.phys.Vec3 dir = ctx.edge().fractal().calculateContinuousFlow(on[0], on[1]);
+                final double r = waterRadiusAt(ctx.edge(), on[0], on[1]);
+                if (dir.lengthSqr() > 1.0E-6 && dist - r < PLUME_REACH + PLUME_REACH_PER_RADIUS * r) {
+                    fx = dir.x;
+                    fz = dir.z;
+                    radius = r;
+                    near = dist - r;
+                    edge = ctx.edge();
+                    ox = x - on[0];
+                    oz = z - on[1];
+
+                    d = Math.abs(fx * oz - fz * ox);
+                }
+            }
+        }
+        final WatershedContext mountain = evaluateWatershedContext(x, z, getGlobalGenerator(),
+                level != null ? level : dummyAccessor, getGlobalRandomState(), true);
+        if (mountain.bestPath != null) {
+            final WatershedPath.RiverNodeData data = mountain.bestPath.getClosestNodeData(x, z);
+            if (data.flowDir.lengthSqr() > 1.0E-6 && Math.abs(data.y - y) <= 4 && data.distance - data.width < near
+                    && data.distance - data.width < PLUME_REACH + PLUME_REACH_PER_RADIUS * data.width) {
+                fx = data.flowDir.x;
+                fz = data.flowDir.z;
+                radius = data.width;
+                edge = null;
+                path = mountain.bestPath;
+
+                ox = x - data.x;
+                oz = z - data.z;
+                d = Math.abs(fx * oz - fz * ox);
+            }
+        }
+        if (d == Double.MAX_VALUE) return net.minecraft.world.phys.Vec3.ZERO;
+        final double reach = PLUME_REACH + PLUME_REACH_PER_RADIUS * radius;
+        if (d > radius * (1.0 + PLUME_SPREAD) + 2.0) return net.minecraft.world.phys.Vec3.ZERO;
+
+        final double cross = fx * oz - fz * ox;
+        final double footX = x + fz * cross, footZ = z - fx * cross;
+        double into = 0.0;
+        while (into < reach && !riverWaterAt(level, lake, edge, path, footX - fx * into, footZ - fz * into)) {
+            into += PLUME_STEP;
+        }
+
+        while (into >= 1.0 && into < reach && riverWaterAt(level, lake, edge, path, footX - fx * (into - 1.0), footZ - fz * (into - 1.0))) {
+            into -= 1.0;
+        }
+        double speed = 0.0, vx = fx, vz = fz;
+        if (into < reach) {
+            final double t = into / reach;
+            final double wide = radius * (1.0 + PLUME_SPREAD * t);
+            final double across = Mth.clamp(d / Math.max(1.0, wide), 0.0, 1.0);
+            final double start = plumeStart(footX - fx * into, y, footZ - fz * into, level);
+            speed = start * (1.0 - smooth01(t)) * (1.0 - smooth01(across));
+
+            final double turn = PLUME_FAN * t * across * Math.signum(cross);
+            final double c = Math.cos(turn), s = Math.sin(turn);
+            vx = fx * c - fz * s;
+            vz = fx * s + fz * c;
+        }
+        if (lake) {
+            double ahead = 0.0;
+            while (ahead < LAKE_DRAW && stillAt(level, x + fx * ahead, z + fz * ahead, true)) ahead += PLUME_STEP;
+            if (ahead < LAKE_DRAW) {
+                final double k = 1.0 - ahead / LAKE_DRAW;
+                final double draw = PLUME_START * k * k * (1.0 - smooth01(d / Math.max(1.0, radius * 1.5)));
+                if (draw > speed) {
+                    speed = draw;
+                    vx = fx;
+                    vz = fz;
+                }
+            }
+        }
+        if (speed < PLUME_LEAST) return net.minecraft.world.phys.Vec3.ZERO;
+        return new net.minecraft.world.phys.Vec3(vx * speed, 0.0, vz * speed);
+    }
+
+    private static final double WOBBLE_FROM = 1.25;
+    private static final double WOBBLE_TURN = 0.22;
+    private static final double WOBBLE_SURGE = 0.15;
+
+    private static net.minecraft.world.phys.Vec3 wobble(net.minecraft.world.level.Level level, double x, double z,
+            net.minecraft.world.phys.Vec3 flow) {
+        if (level == null || RIVER_BED_NOISE == null || !configOn(Config.CURRENT_WOBBLE::get)) return flow;
+        final double speed = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+        if (speed < WOBBLE_FROM) return flow;
+        final double t = level.getGameTime() * 0.02;
+        final double gate = smooth01((RIVER_BED_NOISE.getValue(x * 0.01 + t * 0.05, z * 0.01 - 300.0) - 0.15) / 0.3)
+                * smooth01((speed - WOBBLE_FROM) / 0.4);
+        if (gate <= 0.0) return flow;
+        final double turn = RIVER_BED_NOISE.getValue(x * 0.06 + t, z * 0.06 - t * 0.7) * WOBBLE_TURN * gate;
+        final double surge = 1.0 + RIVER_BED_NOISE.getValue(z * 0.06 - 40.0 + t * 0.8, x * 0.06 + 40.0) * WOBBLE_SURGE * gate;
+        final double c = Math.cos(turn) * surge, s = Math.sin(turn) * surge;
+        return new net.minecraft.world.phys.Vec3(flow.x * c - flow.z * s, flow.y, flow.x * s + flow.z * c);
+    }
+
+    public static net.minecraft.world.phys.Vec3 plannedRiverFlow(double x, int y, double z,
+            net.minecraft.world.level.Level level) {
         if (y >= WORLD_SEA_LEVEL - 6 && y <= WORLD_SEA_LEVEL + 1) {
             final net.minecraft.world.phys.Vec3 vanilla = VanillaRiverFlow.flowAt(level, x, y, z);
             if (vanilla != null) return vanilla;
@@ -3885,7 +5314,7 @@ public class HydrologyManager {
         double cz = z + 0.5;
 
         if (isInLake(cx, cz)) {
-            return net.minecraft.world.phys.Vec3.ZERO;
+            return stillWaterFlow(cx, y, cz, level, true);
         }
 
         net.minecraft.world.phys.Vec3 mountainFlow = ravineFlow(cx, y, cz);
@@ -3895,7 +5324,8 @@ public class HydrologyManager {
             WatershedContext mountainCtx = evaluateWatershedContext(cx, cz, generator, accessor, randomState,
                     useCacheOnly);
 
-            if (mountainCtx.bestPath != null && mountainCtx.distance < mountainCtx.width * 1.5) {
+            final double outside = mountainCtx.bestPath == null ? 0.0 : mountainCtx.distance - mountainCtx.width * 1.5;
+            if (mountainCtx.bestPath != null && outside < WATER_EDGE_REACH && (outside <= 0.0 || !inSea(level, cx, cz))) {
                 WatershedPath.RiverNodeData data = mountainCtx.bestPath.getClosestNodeData(cx, cz);
 
                 int top = Math.max(data.y + 20, WORLD_SEA_LEVEL);
@@ -3904,7 +5334,9 @@ public class HydrologyManager {
                     if (lip != Integer.MIN_VALUE) top = Math.max(top, lip + 1);
                 }
                 if (y >= data.y - 20 && y <= top) {
-                    mountainFlow = data.flowDir;
+                    mountainFlow = waterfallCurrent(mountainCtx.bestPath, data, cx, y, cz,
+                            data.flowDir.scale(mountainPace(data, cx, y, cz)));
+                    if (outside > 0.0) mountainFlow = mountainFlow.scale(1.0 - smooth01(outside / WATER_EDGE_REACH));
                     pastLowlandMouth = mountainCtx.bestPath.hitMainRiver && data.beyondEnd && data.nodeIndex == 0
                             && (cx - data.x) * data.flowDir.x + (cz - data.z) * data.flowDir.z > 0.0;
                 }
@@ -3958,11 +5390,9 @@ public class HydrologyManager {
 
     private static net.minecraft.world.phys.Vec3 lowlandFlow(double x, int y, double z,
             net.minecraft.world.level.Level level) {
-        if (level != null) {
-            net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos((int) x, y, (int) z);
-            if (isOceanAt(level, pos)) {
-                return net.minecraft.world.phys.Vec3.ZERO;
-            }
+        final net.minecraft.world.level.Level seen = level != null ? level : drawnLevel.get();
+        if (seen != null && isOceanAt(seen, new net.minecraft.core.BlockPos(Mth.floor(x), y, Mth.floor(z)))) {
+            return stillWaterFlow(x, y, z, level, false);
         }
 
         com.AdamNew.dynamicwaters.river.RiverContext ctx = com.AdamNew.dynamicwaters.MainRivers.findNearest(x, z,
@@ -3976,21 +5406,42 @@ public class HydrologyManager {
         if (level != null
                 && isOceanBiome(level.getBiome(new net.minecraft.core.BlockPos(net.minecraft.util.Mth.floor(x),
                         net.minecraft.util.Mth.floor(y), net.minecraft.util.Mth.floor(z))))) {
-            return net.minecraft.world.phys.Vec3.ZERO;
+            return stillWaterFlow(x, y, z, level, false);
         }
 
-        if (ctx != null && stillDelta(ctx.edge())) {
-            return net.minecraft.world.phys.Vec3.ZERO;
+        com.AdamNew.dynamicwaters.river.RiverGraphEdge edge = ctx != null ? ctx.edge() : null;
+        double edgeDistSq = ctx != null ? ctx.distSq() : 0.0;
+        if (edge != null && stillDelta(edge)) {
+            edge = null;
+            double deepest = 0.0;
+            final double[] on = new double[2];
+            for (com.AdamNew.dynamicwaters.river.RiverGraphEdge path : com.AdamNew.dynamicwaters.MainRivers.riversAt(x, z)) {
+                if (stillDelta(path) || path.fractal().boxDistanceSq(x, z) >= (path.width * 2.0 + 4.0) * (path.width * 2.0 + 4.0)) {
+                    continue;
+                }
+                final double dSq = path.fractal().nearestPoint(x, z, on);
+                final double in = flowWaterRadius(path, x, z) + 1.0 - Math.sqrt(dSq);
+                if (in > deepest) {
+                    deepest = in;
+                    edge = path;
+                    edgeDistSq = dSq;
+                }
+            }
+
+            if (edge == null) return stillWaterFlow(x, y, z, level, false);
         }
 
-        if (ctx != null) {
-            double rawDistance = Math.sqrt(ctx.distSq());
+        if (edge != null) {
+            double rawDistance = Math.sqrt(edgeDistSq);
             double jitter = getRiverJitter(x, z);
-            jitter *= (Math.sqrt(ctx.widthSq()) / 10.0);
+            jitter *= (Math.sqrt(edge.widthSq(x, z)) / 10.0);
 
             double distance = Math.max(0, rawDistance + jitter);
 
-            if (distance < flowWaterRadius(ctx.edge(), x, z) + 1.0) {
+            final double waterRadius = flowWaterRadius(edge, x, z);
+
+            final double outside = distance - (waterRadius + 1.0);
+            if (outside < WATER_EDGE_REACH) {
                 int rx = (int) Math.floor(x / REGION_SIZE);
                 int rz = (int) Math.floor(z / REGION_SIZE);
 
@@ -4057,14 +5508,16 @@ public class HydrologyManager {
                     double blendedAngle = Math.atan2(sinSum, cosSum);
                     finalFlow = new net.minecraft.world.phys.Vec3(Math.cos(blendedAngle), 0, Math.sin(blendedAngle));
                 } else {
-                    finalFlow = ctx.edge().fractal().calculateContinuousFlow(x, z);
+                    finalFlow = edge.fractal().calculateContinuousFlow(x, z);
                 }
 
-                return finalFlow;
+                final double share = lowlandPace(edge, x, y, z, waterRadius)
+                        * (outside > 0.0 ? 1.0 - smooth01(outside / WATER_EDGE_REACH) : 1.0);
+                return share != 1.0 ? finalFlow.scale(share) : finalFlow;
             }
         }
 
-        return net.minecraft.world.phys.Vec3.ZERO;
+        return stillWaterFlow(x, y, z, level, false);
     }
 
     public static net.minecraft.world.phys.Vec3 findNearestRiverNode(double px, double pz) {

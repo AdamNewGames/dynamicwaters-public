@@ -167,7 +167,7 @@ public final class RiverNetworkBuilder {
         final long regionSeed = regionSeed(rx, rz, worldSeed);
         final RandomSource random = new XoroshiroRandomSource(regionSeed);
 
-        final RegionRiverGenerator riverGenerator = new RegionRiverGenerator(field);
+        final RegionRiverGenerator riverGenerator = new RegionRiverGenerator(field, worldSeed, generator, randomState);
         createInitialDrains(regionKey, riverGenerator, field, random, minX, minZ, regionSize);
 
         LoadingProgressTracker.setProgress(regionKey, 75, "Carving river beds...");
@@ -462,18 +462,51 @@ public final class RiverNetworkBuilder {
                 }
 
                 if (bestShoreX != -1) {
-                    final float bestAngle = findBestStartingAngle(field, random, bestShoreX, bestShoreZ);
+                    float bestAngle = findBestStartingAngle(field, random, bestShoreX, bestShoreZ);
                     if (!Float.isNaN(bestAngle)) {
                         final RandomSource rng = new XoroshiroRandomSource(random.nextLong());
                         double extension = 60.0; // Increased to push drain further into ocean
                         double startX = bestShoreX + 0.5 - Math.cos(bestAngle) * extension;
                         double startZ = bestShoreZ + 0.5 - Math.sin(bestAngle) * extension;
-                        riverGenerator.add(new RiverInstance.Builder(rng, startX, startZ, bestAngle,
-                                RIVER_STEP_LENGTH, RIVER_DEPTH, RIVER_FEATHER));
+                        // See SEA_SIDE: a mouth set out on land is set out into the sea instead.
+                        if (field.isLand((int) Math.floor(startX), (int) Math.floor(startZ))) {
+                            final float seaward = seawardAngle(field, bestShoreX, bestShoreZ);
+                            if (!Float.isNaN(seaward)) {
+                                bestAngle = seaward + (float) Math.PI;
+                                startX = bestShoreX + 0.5 + Math.cos(seaward) * extension;
+                                startZ = bestShoreZ + 0.5 + Math.sin(seaward) * extension;
+                            }
+                        }
+                        // No mouth on a shore whose biome keeps rivers out (Config.RIVER_BIOME_CHANCE) - left out
+                        // once all is drawn for it, so the other rivers come out of the region's random as they were.
+                        if (riverGenerator.allows(bestShoreX, bestShoreZ)) {
+                            riverGenerator.add(new RiverInstance.Builder(rng, startX, startZ, bestAngle,
+                                    RIVER_STEP_LENGTH, RIVER_DEPTH, RIVER_FEATHER));
+                        }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * SEA_SIDE: the way from a shore point out to the sea - the mean of the directions to the ocean among its eight
+     * neighbouring samples - or NaN where none is ocean. A river's mouth is set out from the shore away from the way
+     * inland it starts on; where the coast bends or runs aslant, that way out lay along the coast, and the mouth on the
+     * land of a stony shore or a cape: the river ended in a round pool forty blocks from the sea.
+     */
+    private static float seawardAngle(OceanField field, int x, int z) {
+        double sx = 0.0, sz = 0.0;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                if (field.isLand(x + dx * SAMPLE_STEP, z + dz * SAMPLE_STEP)) continue;
+                final double len = Math.sqrt(dx * dx + dz * dz);
+                sx += dx / len;
+                sz += dz / len;
+            }
+        }
+        return sx * sx + sz * sz < 1.0E-6 ? Float.NaN : (float) Math.atan2(sz, sx);
     }
 
     /**
@@ -553,9 +586,20 @@ public final class RiverNetworkBuilder {
      */
     private static final class RegionRiverGenerator extends RiverInstance.MultiParallelBuilder {
         private final OceanField field;
+        final long seed;
+        final ChunkGenerator generator;
+        final RandomState randomState;
 
-        RegionRiverGenerator(OceanField field) {
+        RegionRiverGenerator(OceanField field, long seed, ChunkGenerator generator, RandomState randomState) {
             this.field = field;
+            this.seed = seed;
+            this.generator = generator;
+            this.randomState = randomState;
+        }
+
+        /** See terrain.RiverChance: whether a river may run at (x, z) by the biome there. */
+        boolean allows(double x, double z) {
+            return com.AdamNew.dynamicwaters.terrain.RiverChance.lowlandAllows(x, z, seed, generator, randomState);
         }
 
         @Override
@@ -572,6 +616,8 @@ public final class RiverNetworkBuilder {
                 if (!field.isLand(round(vertex.x()), round(vertex.y()))) {
                     return true;
                 }
+                // Not into the land its biome keeps rivers out of (Config.RIVER_BIOME_CHANCE).
+                if (!allows(vertex.x(), vertex.y())) return false;
                 final int prevDist = field.distanceToOcean(round(prev.x()), round(prev.y()));
                 final int nextDist = field.distanceToOcean(round(vertex.x()), round(vertex.y()));
                 return nextDist >= prevDist || nextDist >= 12;

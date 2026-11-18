@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:caldera"]
+  },
+  "rapids": ["minecraft:tuff*2", "minecraft:gravel*3", "minecraft:stone", "minecraft:andesite"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:gravel*2", "minecraft:tuff"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:gravel", "minecraft:tuff"],
+  "patch_size": 5,
+  "shore_height": 1
+}

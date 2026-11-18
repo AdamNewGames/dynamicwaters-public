@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:arid_highlands", "natures_spirit:dusty_slopes", "natures_spirit:red_peaks", "natures_spirit:snowcapped_red_peaks"]
+  },
+  "rapids": ["natures_spirit:chert*4", "minecraft:gravel*2"],
+  "silt": ["natures_spirit:kaolin*2", "minecraft:gravel*2", "natures_spirit:sandy_soil"],
+  "shore": ["keep*4", "natures_spirit:chert*2", "natures_spirit:sandy_soil"],
+  "bars": ["minecraft:gravel*2", "natures_spirit:chert*2"],
+  "flats": ["keep*3", "natures_spirit:sandy_soil", "natures_spirit:chert"],
+  "patch_size": 5,
+  "shore_height": 1
+}

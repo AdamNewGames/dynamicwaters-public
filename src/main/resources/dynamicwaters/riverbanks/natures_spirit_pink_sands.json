@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:drylands", "natures_spirit:tropical_shores", "natures_spirit:pink_sandy_river", "natures_spirit:blooming_dunes"]
+  },
+  "rapids": ["natures_spirit:pink_sandstone*3", "minecraft:gravel*2"],
+  "silt": ["natures_spirit:pink_sand*5", "minecraft:clay"],
+  "shore": ["keep*4", "natures_spirit:pink_sand*3"],
+  "bars": ["natures_spirit:pink_sand*4", "minecraft:gravel"],
+  "flats": ["keep*3", "natures_spirit:pink_sand*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

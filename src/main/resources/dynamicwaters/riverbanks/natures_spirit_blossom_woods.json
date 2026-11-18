@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:sugi_forest", "natures_spirit:blooming_sugi_forest", "natures_spirit:windswept_sugi_forest", "natures_spirit:wisteria_forest", "natures_spirit:floral_ridges"]
+  },
+  "rapids": ["minecraft:mossy_cobblestone*2", "minecraft:gravel*2", "minecraft:cobblestone", "minecraft:stone"],
+  "silt": ["minecraft:clay*2", "minecraft:gravel*2", "minecraft:sand"],
+  "shore": ["keep*4", "minecraft:moss_block", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:gravel*2", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:moss_block"],
+  "patch_size": 5,
+  "shore_height": 1
+}

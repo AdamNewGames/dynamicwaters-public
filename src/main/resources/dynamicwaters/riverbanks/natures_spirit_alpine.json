@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:alpine_clearings", "natures_spirit:alpine_highlands", "natures_spirit:coniferous_covert", "natures_spirit:alpine_river"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:andesite*2", "minecraft:cobblestone", "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:gravel*3", "minecraft:clay*2"],
+  "shore": ["keep*4", "minecraft:coarse_dirt*2", "minecraft:andesite"],
+  "bars": ["minecraft:gravel*3", "minecraft:andesite"],
+  "flats": ["keep*3", "minecraft:coarse_dirt"],
+  "patch_size": 5,
+  "shore_height": 1
+}

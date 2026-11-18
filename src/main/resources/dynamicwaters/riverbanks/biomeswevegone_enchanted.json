@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:enchanted_tangle", "biomeswevegone:forgotten_forest", "biomeswevegone:skyris_vale",
+      "biomeswevegone:weeping_witch_forest"]
+  },
+  "rapids": ["biomeswevegone:overgrown_stone*2", "minecraft:mossy_cobblestone*2", "minecraft:gravel*2"],
+  "silt": ["minecraft:mud*2", "minecraft:clay*2", "minecraft:gravel"],
+  "shore": ["keep*4", "biomeswevegone:overgrown_stone", "minecraft:moss_block"],
+  "bars": ["minecraft:gravel*2", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:moss_block"],
+  "patch_size": 5,
+  "shore_height": 1
+}

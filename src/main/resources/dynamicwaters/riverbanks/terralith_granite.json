@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:granite_cliffs", "terralith:yosemite_cliffs", "terralith:yosemite_lowlands"]
+  },
+  "rapids": ["minecraft:granite*2", "minecraft:gravel*3", "minecraft:cobblestone", "minecraft:stone"],
+  "silt": ["minecraft:sand*3", "minecraft:gravel*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:gravel*2", "minecraft:granite"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand*2"],
+  "flats": ["keep*3", "minecraft:gravel", "minecraft:granite"],
+  "patch_size": 5,
+  "shore_height": 1
+}

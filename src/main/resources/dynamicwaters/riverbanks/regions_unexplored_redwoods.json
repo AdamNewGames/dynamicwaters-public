@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:redwoods", "regions_unexplored:sparse_redwoods"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:mossy_cobblestone*2", "regions_unexplored:mossy_stone*2"],
+  "silt": ["minecraft:mud*2", "minecraft:gravel*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:podzol*2", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:podzol"],
+  "patch_size": 5,
+  "shore_height": 1
+}

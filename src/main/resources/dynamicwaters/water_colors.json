@@ -1,0 +1,183 @@
+{
+  "regions_unexplored": {
+    "bayou": "#52683F",
+    "old_growth_bayou": "#4B5F3A",
+    "fen": "#5A7A55",
+    "fungal_fen": "#5E7F6A",
+    "marsh": "#55806A",
+    "muddy_river": "#5B7A8A",
+
+    "boreal_taiga": "#3A6489",
+    "golden_boreal_taiga": "#46708A",
+    "old_growth_boreal_taiga": "#3A6489",
+    "old_growth_golden_boreal_taiga": "#46708A",
+    "blackwood_taiga": "#2F4F6E",
+    "pine_taiga": "#3B6890",
+    "cold_boreal_taiga": "#3C5F94",
+
+    "barley_fields": "#5583A6",
+    "prairie": "#5583A6",
+    "orchard": "#5583A6",
+    "pumpkin_fields": "#4E7C9C",
+    "autumnal_maple_forest": "#4A79A8",
+    "silver_birch_forest": "#4C86B8",
+
+    "chalk_cliffs": "#5BB5C8",
+    "ashen_woodland": "#6E7F8C",
+
+    "joshua_desert": "#5A8FA8",
+    "saguaro_desert": "#5A8FA8",
+    "outback": "#6A8C9A",
+    "arid_mountains": "#4E8CB0",
+    "baobab_savanna": "#5590A8",
+    "dry_bushland": "#5590A8",
+    "steppe": "#5590A8",
+
+    "rainforest": "#2E9E9A",
+    "sparse_rainforest": "#33A6A6",
+    "eucalyptus_forest": "#3A9EB0",
+    "bamboo_forest": "#3BA59A",
+    "tropics": "#2FC0C8",
+    "rocky_reef": "#35C4D0",
+    "tropical_river": "#30AFC0",
+
+    "frozen_pine_taiga": "#3D6FD0",
+    "frozen_tundra": "#3D6FD0",
+    "tundra": "#3D6FD0",
+    "cold_deciduous_forest": "#3D6FD0",
+    "icy_heights": "#4FA0D8",
+    "spires": "#4FA0D8",
+    "cold_river": "#3A6AC8",
+
+    "mountains": "#3E8FD0",
+    "highland_fields": "#4192C8",
+    "towering_cliffs": "#3A88C8",
+    "pine_slopes": "#3E88C0",
+    "rocky_meadow": "#4C9C9A",
+
+    "alpha_grove": "#2A5CD0",
+    "deciduous_forest": "#3B78C4",
+    "old_growth_forest": "#35699E",
+    "maple_forest": "#4073B8",
+    "windswept_maple_forest": "#3F7FC8",
+    "temperate_grove": "#3E80C8",
+    "magnolia_woodland": "#4A88D0",
+    "mauve_hills": "#5A8FB8",
+    "wisteria_grove": "#5E88C8",
+    "willow_forest": "#4A7F7A",
+    "redwoods": "#3A6E7E",
+    "sparse_redwoods": "#3F7888",
+
+    "clover_plains": "#3F82D8",
+    "flower_fields": "#4486DC",
+    "grassland": "#4A88C8",
+    "poppy_fields": "#4580D0",
+    "shrubland": "#4A7FB8",
+
+    "grassy_beach": "#3F8EDC",
+    "gravel_beach": "#4A7FB0"
+  },
+
+  "biomeswevegone": {
+    "bayou": "#4E7048",
+    "cypress_swamplands": "#50705A",
+    "cypress_wetlands": "#4F8A68",
+    "pale_bog": "#8AA8A0",
+    "white_mangrove_marshes": "#4E9078",
+
+    "atacama_outback": "#6A9CB8",
+    "mojave_desert": "#5E95B0",
+    "windswept_desert": "#6CA0B8",
+    "red_rock_peaks": "#7A8A94",
+    "red_rock_valley": "#7A8A94",
+    "rugged_badlands": "#7A8A94",
+    "sierra_badlands": "#7A8A94",
+
+    "araucaria_savanna": "#5592A8",
+    "baobab_savanna": "#5590A8",
+    "ironwood_gour": "#5A8EA0",
+    "firecracker_chaparral": "#5A90B0",
+
+    "black_forest": "#2F5A80",
+    "canadian_shield": "#3870A8",
+    "cika_woods": "#3A6A98",
+    "coniferous_forest": "#3A6E9E",
+    "maple_taiga": "#3E72A8",
+    "aspen_boreal": "#4078B0",
+
+    "frosted_coniferous_forest": "#3D6CC8",
+    "frosted_taiga": "#3E6ECC",
+    "eroded_borealis": "#3D72C8",
+    "howling_peaks": "#4F92D0",
+    "shattered_glacier": "#58A8D8",
+
+    "dacite_ridges": "#6FA8C8",
+    "dacite_shore": "#6FA8C8",
+
+    "crag_gardens": "#58B8C8",
+    "fragment_jungle": "#3F8E8A",
+    "jacaranda_jungle": "#5A84C8",
+    "tropical_rainforest": "#2E9E96",
+
+    "enchanted_tangle": "#4A6CC8",
+    "forgotten_forest": "#3F6A90",
+    "skyris_vale": "#4A8AD8",
+    "weeping_witch_forest": "#3E5A86",
+
+    "ebony_woods": "#2F5E86",
+    "orchard": "#4683C0",
+    "overgrowth_woodlands": "#3E7A8E",
+    "redwood_thicket": "#3A6E7E",
+    "sakura_grove": "#5C8AD8",
+    "zelkova_forest": "#3F70A0",
+    "temperate_grove": "#3E80C8",
+
+    "allium_shrubland": "#4E7FD0",
+    "amaranth_grassland": "#4A84C8",
+    "coconino_meadow": "#4688D0",
+    "prairie": "#4C88B8",
+    "rose_fields": "#4A80D0",
+    "pumpkin_valley": "#4A7CA8",
+    "crimson_tundra": "#5890C0",
+
+    "basalt_barrera": "#3A6E90",
+    "rainbow_beach": "#3FB8E0"
+  },
+
+  "terralith": {
+    "alpine_highlands": "#4192C8",
+    "highlands": "#4192C8",
+    "temperate_highlands": "#3E80C8",
+    "forested_highlands": "#3B6E9E",
+    "birch_taiga": "#3D7AB8",
+    "blooming_valley": "#4486DC",
+
+    "arid_highlands": "#5590A8",
+    "brushland": "#5590A8",
+    "savanna_slopes": "#5590A8",
+    "steppe": "#5590A8",
+    "ashen_savanna": "#6A7F86",
+    "bryce_canyon": "#7A8A94",
+    "painted_mountains": "#7A8A94",
+
+    "volcanic_crater": "#4A6E78",
+    "volcanic_peaks": "#4A6E78",
+    "basalt_cliffs": "#3F6A80",
+    "granite_cliffs": "#4A80B0",
+    "white_cliffs": "#5BB5C8",
+    "gravel_beach": "#4A7FB0",
+
+    "rocky_mountains": "#3E8FD0",
+    "emerald_peaks": "#3AA0B8",
+    "scarlet_mountains": "#4A86C8",
+    "stony_spires": "#3A88C8",
+    "windswept_spires": "#3A88C8",
+    "yosemite_cliffs": "#3E8FC8",
+    "frozen_cliffs": "#4FA0D8",
+    "glacial_chasm": "#58A8D8",
+    "snowy_maple_forest": "#3D6FD0",
+
+    "skylands_autumn": "#4A79A8",
+    "skylands_winter": "#3D6FD0"
+  }
+}

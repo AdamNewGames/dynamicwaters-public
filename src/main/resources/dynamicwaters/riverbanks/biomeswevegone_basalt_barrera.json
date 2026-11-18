@@ -1,0 +1,13 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:basalt_barrera"]
+  },
+  "rapids": ["minecraft:basalt*2", "minecraft:smooth_basalt*2", "minecraft:gravel"],
+  "silt": ["biomeswevegone:black_sand*3", "minecraft:gravel"],
+  "shore": ["keep*3", "biomeswevegone:black_sand*2", "minecraft:basalt"],
+  "bars": ["biomeswevegone:black_sand*3"],
+  "flats": ["keep*3", "biomeswevegone:black_sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

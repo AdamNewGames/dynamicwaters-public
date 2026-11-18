@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:white_mesa"]
+  },
+  "rapids": ["minecraft:white_terracotta*2", "minecraft:sandstone", "minecraft:gravel*2"],
+  "silt": ["minecraft:sand*4", "minecraft:white_terracotta"],
+  "shore": ["minecraft:sand*2", "keep*2", "minecraft:white_terracotta", "minecraft:calcite"],
+  "bars": ["minecraft:sand*3", "minecraft:gravel"],
+  "flats": ["minecraft:sand*2", "keep", "minecraft:white_terracotta"],
+  "patch_size": 5,
+  "shore_height": 1
+}

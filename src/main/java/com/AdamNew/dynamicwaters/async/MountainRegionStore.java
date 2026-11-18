@@ -110,6 +110,13 @@ public final class MountainRegionStore {
         d.writeInt(com.AdamNew.dynamicwaters.terrain.BasinTile.ALGORITHM_VERSION);
         d.writeLong(level.getSeed());
         d.writeUTF(Platform.modVersion("dynamicwaters"));
+        // The world's rivers' widths and depths (WorldShape.Scale), as it keeps them whatever the config says: the
+        // mountain rivers end on the lowland rivers' banks.
+        final com.AdamNew.dynamicwaters.WorldShape.Scale scale = com.AdamNew.dynamicwaters.HydrologyManager.riverScale();
+        d.writeDouble(scale.lowlandWidth());
+        d.writeDouble(scale.lowlandDepth());
+        d.writeDouble(scale.mountainWidth());
+        d.writeDouble(scale.mountainDepth());
 
         Path cfg = Platform.configDir()
                 .resolve("dynamicwaters-common.toml");

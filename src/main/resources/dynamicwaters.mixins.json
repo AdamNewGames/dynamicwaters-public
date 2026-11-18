@@ -10,9 +10,12 @@
     "BiomeSourceMixin",
     "CanyonCarverMixin",
     "ChunkGeneratorMixin",
+    "ChunkMapAccessor",
     "EntityMixin",
     "FlowingFluidMixin",
+    "GenerationChunkHolderAccessor",
     "ItemEntityMixin",
+    "LevelChunkMixin",
     "LivingEntityMixin",
     "ModernBetaChunkGeneratorMixin",
     "MultiNoiseBiomeSourceMixin",
@@ -27,6 +30,9 @@
   ],
   "client": [
     "ConfigurationScreenMixin",
+    "client.BiomeColorsMixin",
+    "client.ClientLevelFoamMixin",
+    "client.FogRendererMixin",
     "client.LevelLoadingScreenMixin",
     "TitleScreenMixin",
     "WaterParticleMixin"

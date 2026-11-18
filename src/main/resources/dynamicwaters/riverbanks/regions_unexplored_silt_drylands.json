@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:steppe", "regions_unexplored:dry_bushland", "regions_unexplored:joshua_desert"]
+  },
+  "rapids": ["minecraft:gravel*3", "regions_unexplored:silt_coarse_dirt*2", "minecraft:cobblestone"],
+  "silt": ["regions_unexplored:silt_mud*3", "minecraft:sand*2"],
+  "shore": ["keep*3", "regions_unexplored:silt_coarse_dirt*2", "minecraft:coarse_dirt"],
+  "bars": ["minecraft:sand*3", "regions_unexplored:silt_mud"],
+  "flats": ["keep*3", "minecraft:sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

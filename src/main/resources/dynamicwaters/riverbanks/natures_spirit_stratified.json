@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:stratified_desert", "natures_spirit:lively_dunes"]
+  },
+  "rapids": ["natures_spirit:chert*2", "natures_spirit:yellow_kaolin*2", "natures_spirit:brown_kaolin"],
+  "silt": ["minecraft:sand*2", "natures_spirit:sandy_soil*2", "natures_spirit:white_kaolin"],
+  "shore": ["keep*4", "natures_spirit:sandy_soil*2", "natures_spirit:yellow_kaolin"],
+  "bars": ["minecraft:sand*2", "natures_spirit:sandy_soil*2"],
+  "flats": ["keep*3", "natures_spirit:sandy_soil*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

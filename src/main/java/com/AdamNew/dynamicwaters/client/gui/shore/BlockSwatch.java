@@ -33,6 +33,7 @@ final class BlockSwatch {
     private static final Map<String, List<Face>> FACES = new HashMap<>();
     private static List<Block> dressable;
     private static List<Block> plantable;
+    private static List<Block> leaves;
 
     private static final String[] WATER_PLANTS = {
             "minecraft:seagrass", "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:sea_pickle",
@@ -102,7 +103,14 @@ final class BlockSwatch {
                 if (quads.isEmpty()) quads = model.getQuads(state, null, RandomSource.create(42L));
                 *///?}
                 for (BakedQuad q : quads) {
-                    final int tint = q.isTinted() ? mc.getBlockColors().getColor(state, null, null, q.getTintIndex()) : -1;
+                    int tint = -1;
+                    if (q.isTinted()) {
+                        try {
+                            tint = mc.getBlockColors().getColor(state, null, null, q.getTintIndex());
+                        } catch (Throwable t) {
+                            tint = net.minecraft.world.level.GrassColor.getDefaultColor();
+                        }
+                    }
                     out.add(new Face(q.getSprite(), tint));
                     if (out.size() >= 3) break;
                 }
@@ -161,6 +169,30 @@ final class BlockSwatch {
         out.addAll(rest);
         plantable = out;
         return out;
+    }
+
+    static List<Block> leaves() {
+        if (leaves != null) return leaves;
+        final List<Block> out = new ArrayList<>();
+        for (Block b : BuiltInRegistries.BLOCK) {
+            if (b instanceof net.minecraft.world.level.block.LeavesBlock
+                    || b.defaultBlockState().is(net.minecraft.tags.BlockTags.LEAVES)) {
+                out.add(b);
+            }
+        }
+        out.sort(Comparator.comparing(b -> b.getName().getString().toLowerCase()));
+        leaves = out;
+        return out;
+    }
+
+    static void icon(GuiGraphics g, String id, int x, int y) {
+        final Block b = block(id);
+        if (b != null && b.asItem() != Items.AIR) {
+            com.AdamNew.dynamicwaters.client.gui.SafeItemIcon.render(g, new net.minecraft.world.item.ItemStack(b), x, y,
+                    () -> draw(g, id, x, y, 16));
+        } else {
+            draw(g, id, x, y, 16);
+        }
     }
 
     static String idOf(Block b) {

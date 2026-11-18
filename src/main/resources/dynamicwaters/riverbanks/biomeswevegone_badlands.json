@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:red_rock_peaks", "biomeswevegone:red_rock_valley", "biomeswevegone:rugged_badlands",
+      "biomeswevegone:sierra_badlands"]
+  },
+  "rapids": ["biomeswevegone:red_rock*3", "minecraft:gravel*2", "minecraft:red_sand"],
+  "silt": ["minecraft:red_sand*3", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:red_sand*2", "biomeswevegone:red_rock"],
+  "bars": ["minecraft:red_sand*3"],
+  "flats": ["keep*3", "minecraft:red_sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

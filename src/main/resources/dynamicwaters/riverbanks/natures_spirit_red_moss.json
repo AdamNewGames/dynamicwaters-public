@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:tundra", "natures_spirit:tundra_river", "natures_spirit:boreal_taiga"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone*2", "minecraft:stone"],
+  "silt": ["minecraft:gravel*3", "minecraft:clay*2"],
+  "shore": ["keep*4", "natures_spirit:red_moss_block*2", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "natures_spirit:red_moss_block*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

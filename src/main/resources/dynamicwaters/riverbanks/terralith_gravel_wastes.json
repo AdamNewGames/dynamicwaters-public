@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:gravel_desert", "terralith:cold_shrubland", "terralith:rocky_shrubland"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:cobblestone*2", "minecraft:stone"],
+  "silt": ["minecraft:gravel*4", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:gravel*3", "minecraft:coarse_dirt"],
+  "bars": ["minecraft:gravel*4"],
+  "flats": ["keep*2", "minecraft:gravel*2", "minecraft:coarse_dirt"],
+  "patch_size": 6,
+  "shore_height": 1
+}

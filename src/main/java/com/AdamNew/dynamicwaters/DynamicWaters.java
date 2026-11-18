@@ -48,10 +48,35 @@ public class DynamicWaters {
 
     public static void onLevelLoad(net.minecraft.server.level.ServerLevel level) {
         if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            HydrologyManager.setRiverScale(WorldShape.scale(level));
+            HydrologyManager.setLowlandCut(WorldShape.cut(level));
             HydrologyManager.setGlobalGenerator(level.getChunkSource().getGenerator(), level.getChunkSource().randomState());
             HydrologyManager.setSeed(level.getSeed());
             HydrologyManager.setSeaLevel(level.getSeaLevel());
+
+            if (Boolean.getBoolean("dynamicwaters.labBushLeaves")) {
+                level.registryAccess().registryOrThrow(Registries.BIOME).holders()
+                        .forEach(h -> com.mojang.logging.LogUtils.getLogger().info("[DW lab] bush leaves {} = {}",
+                                h.key().location(), com.AdamNew.dynamicwaters.shore.BiomeTrees.leavesOf(h)));
+            }
+
+            if (Boolean.getBoolean("dynamicwaters.labOwnPlants")) {
+                level.registryAccess().registryOrThrow(Registries.BIOME).holders().forEach(h -> {
+                    final com.AdamNew.dynamicwaters.shore.BiomePlants.Own own = com.AdamNew.dynamicwaters.shore.BiomePlants.of(h);
+                    if (own == null) return;
+                    final StringBuilder sb = new StringBuilder();
+                    double last = 0.0;
+                    for (int k = 0; k < own.states().length; k++) {
+                        sb.append(' ').append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(own.states()[k].getBlock()))
+                                .append(' ').append(Math.round((own.upTo()[k] - last) / own.upTo()[own.upTo().length - 1] * 100.0));
+                        last = own.upTo()[k];
+                    }
+                    com.mojang.logging.LogUtils.getLogger().info("[DW lab] own plants {} share {}:{}", h.key().location(),
+                            Math.round(own.share() * 100.0), sb);
+                });
+            }
         }
+        LivingCurrent.onLevelLoad(level);
     }
 
     public static void onServerStarting() {
@@ -70,6 +95,8 @@ public class DynamicWaters {
         com.AdamNew.dynamicwaters.async.MountainRiverScheduler.startPreWarm(server, server.overworld());
         final String labTiles = System.getProperty("dynamicwaters.labTiles");
         if (labTiles != null) HydrologyManager.labBuildTiles(labTiles, server.overworld());
+
+        if (Boolean.getBoolean("dynamicwaters.labCarveNow")) HydrologyManager.labCarveColumns(server.overworld());
     }
 
     public static void onChunkSent(net.minecraft.server.level.ServerPlayer player, net.minecraft.server.level.ServerLevel level,
@@ -79,10 +106,12 @@ public class DynamicWaters {
             Platform.sendToPlayer(player,
                     new com.AdamNew.dynamicwaters.network.SyncVanillaFlowPacket(chunk.getPos().x, chunk.getPos().z, angles));
         }
+        LivingCurrent.sendWithChunk(player, level, chunk);
     }
 
     public static void onServerStopped() {
         com.AdamNew.dynamicwaters.async.MountainRiverScheduler.stop();
+        LivingCurrent.forget();
     }
 
     private static void disableTectonicUndergroundRivers() {
@@ -129,13 +158,12 @@ public class DynamicWaters {
         }
 
         public static void onPlayerChangeDimension(net.minecraft.world.entity.player.Player player) {
-            SENT_REGIONS.put(player.getUUID(), java.util.concurrent.ConcurrentHashMap.newKeySet());
-            SENT_LOWLAND_REGIONS.put(player.getUUID(), java.util.concurrent.ConcurrentHashMap.newKeySet());
             syncPlayerRegions(player);
         }
 
         private static void syncPlayerRegions(net.minecraft.world.entity.player.Player playerEntity) {
-            SENT_REGIONS.putIfAbsent(playerEntity.getUUID(), java.util.concurrent.ConcurrentHashMap.newKeySet());
+            SENT_REGIONS.put(playerEntity.getUUID(), java.util.concurrent.ConcurrentHashMap.newKeySet());
+            SENT_LOWLAND_REGIONS.put(playerEntity.getUUID(), java.util.concurrent.ConcurrentHashMap.newKeySet());
             if (playerEntity instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                 if (!HydrologyManager.riversIn(serverPlayer.serverLevel())) {
                     return;
@@ -148,9 +176,11 @@ public class DynamicWaters {
                 com.AdamNew.dynamicwaters.HydrologyManager.setSeed(seed);
 
                 int seaLevel = serverPlayer.serverLevel().getSeaLevel();
+                final WorldShape.Scale scale = HydrologyManager.riverScale();
                 Platform.sendToPlayer(
                         serverPlayer,
-                        new com.AdamNew.dynamicwaters.network.SyncSeedPacket(seed, seaLevel));
+                        new com.AdamNew.dynamicwaters.network.SyncSeedPacket(seed, seaLevel, scale.lowlandWidth(),
+                                scale.lowlandDepth(), scale.mountainWidth(), scale.mountainDepth()));
 
                 int chunkX = serverPlayer.chunkPosition().x;
                 int chunkZ = serverPlayer.chunkPosition().z;
@@ -196,8 +226,6 @@ public class DynamicWaters {
 
         private static void onPlayerLoginMessages(net.minecraft.world.entity.player.Player player) {
             if (Platform.isModLoaded("tectonic")) {
-                player.sendSystemMessage(net.minecraft.network.chat.Component
-                        .literal("§e[Dynamic Waters] Compatibility with mod Tectonic is still beta."));
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "§a[Dynamic Waters] Tectonic underground rivers were automatically disabled for better performance."));
             }
@@ -213,6 +241,28 @@ public class DynamicWaters {
                 int chunkX, int chunkZ) {
             com.AdamNew.dynamicwaters.HydrologyManager.setSeed(level.getSeed());
             com.AdamNew.dynamicwaters.async.MountainRiverScheduler.onChunkWatched(player, level, chunkX, chunkZ);
+            syncLowlandAround(player, level, chunkX, chunkZ);
+        }
+
+        private static void syncLowlandAround(net.minecraft.server.level.ServerPlayer player,
+                net.minecraft.server.level.ServerLevel level, int chunkX, int chunkZ) {
+            if (!HydrologyManager.riversIn(level) || Platform.isOwnPlayer(player)) return;
+            final java.util.Set<Long> sent = SENT_LOWLAND_REGIONS.computeIfAbsent(player.getUUID(),
+                    k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+            final int mrx = Math.floorDiv(chunkX << 4, com.AdamNew.dynamicwaters.MainRivers.REGION_SIZE);
+            final int mrz = Math.floorDiv(chunkZ << 4, com.AdamNew.dynamicwaters.MainRivers.REGION_SIZE);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    final long key = ((long) (mrx + dx) << 32) | ((mrz + dz) & 0xFFFFFFFFL);
+                    if (sent.contains(key)) continue;
+
+                    final java.util.List<com.AdamNew.dynamicwaters.river.RiverGraphEdge> edges =
+                            com.AdamNew.dynamicwaters.MainRivers.builtRegion(mrx + dx, mrz + dz);
+                    if (edges == null || !sent.add(key)) continue;
+                    Platform.sendToPlayer(player,
+                            new com.AdamNew.dynamicwaters.network.SyncMainRiversPacket(mrx + dx, mrz + dz, edges));
+                }
+            }
         }
     }
 
@@ -237,6 +287,8 @@ public class DynamicWaters {
 
     public static void onRegisterCommands(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
         com.AdamNew.dynamicwaters.command.LocateRiverTerrainCommand.register(dispatcher);
+        com.AdamNew.dynamicwaters.command.RiverLocateCommand.register(dispatcher);
+        com.AdamNew.dynamicwaters.command.ReloadCommand.register(dispatcher);
         dispatcher.register(net.minecraft.commands.Commands.literal("dynamicwaters")
                 .then(net.minecraft.commands.Commands.literal("disableWelcome")
                         .executes(context -> {

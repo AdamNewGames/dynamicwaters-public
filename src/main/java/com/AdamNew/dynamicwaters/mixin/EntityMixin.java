@@ -24,10 +24,10 @@ public class EntityMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void dynamicwaters$pushVehiclesAndPhysics(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         Entity entity = (Entity)(Object)this;
-        if (entity.level().isClientSide()) return;
         if (!entity.isInWater()) return;
 
         boolean isBoat = entity instanceof net.minecraft.world.entity.vehicle.Boat;
+        boolean isItem = entity instanceof net.minecraft.world.entity.item.ItemEntity;
         String className = entity.getClass().getName().toLowerCase();
         boolean isPhysicsObj = className.contains("physics") ||
                                className.contains("ship") ||
@@ -37,17 +37,21 @@ public class EntityMixin {
                                className.contains("sable") ||
                                className.contains("aeronautics") ||
                                className.contains("contraption");
+        if (!isBoat && !isItem && !isPhysicsObj) return;
 
-        if (isBoat || isPhysicsObj) {
-            net.minecraft.world.phys.Vec3 globalPos = com.AdamNew.dynamicwaters.SableCompat.getGlobalPos(entity);
-            net.minecraft.world.phys.Vec3 flow = com.AdamNew.dynamicwaters.HydrologyManager.getRiverFlow(
-                globalPos.x, (int)globalPos.y, globalPos.z, entity.level());
+        if (isPhysicsObj ? entity.level().isClientSide() : !entity.isControlledByLocalInstance()) return;
 
-            if (!flow.equals(net.minecraft.world.phys.Vec3.ZERO)) {
-                double mult = com.AdamNew.dynamicwaters.Config.getFlowMultiplierForEntity(entity);
+        net.minecraft.world.phys.Vec3 globalPos = com.AdamNew.dynamicwaters.SableCompat.getGlobalPos(entity);
+        net.minecraft.world.phys.Vec3 flow = com.AdamNew.dynamicwaters.HydrologyManager.getRiverFlow(
+            globalPos.x, (int)globalPos.y, globalPos.z, entity.level());
+        if (flow.equals(net.minecraft.world.phys.Vec3.ZERO)) return;
+        double mult = com.AdamNew.dynamicwaters.Config.getFlowMultiplierForEntity(entity);
+        if (mult <= 0.0) return;
 
-                entity.setDeltaMovement(entity.getDeltaMovement().add(flow.scale(mult * 0.05)));
-            }
-        }
+        net.minecraft.world.phys.Vec3 push = isItem ? net.minecraft.world.phys.Vec3.ZERO
+                : com.AdamNew.dynamicwaters.HydrologyManager.pushOf(flow).scale(mult * 0.05);
+        if (!isPhysicsObj) push = push.add(com.AdamNew.dynamicwaters.HydrologyManager.paceMakeup(flow));
+
+        entity.setDeltaMovement(entity.getDeltaMovement().add(push));
     }
 }

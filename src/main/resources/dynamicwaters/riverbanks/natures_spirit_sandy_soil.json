@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:chaparral", "natures_spirit:wooded_drylands", "natures_spirit:arid_savanna", "natures_spirit:shrubby_highlands", "natures_spirit:savanna_river", "natures_spirit:arid_river"]
+  },
+  "rapids": ["minecraft:gravel*3", "natures_spirit:chert*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:sand*3", "natures_spirit:sandy_soil*2", "minecraft:clay"],
+  "shore": ["keep*4", "natures_spirit:sandy_soil*3", "minecraft:gravel"],
+  "bars": ["minecraft:sand*2", "minecraft:gravel*2", "natures_spirit:sandy_soil"],
+  "flats": ["keep*3", "natures_spirit:sandy_soil*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

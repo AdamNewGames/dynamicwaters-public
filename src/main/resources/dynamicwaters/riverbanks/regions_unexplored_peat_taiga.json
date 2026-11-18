@@ -1,0 +1,16 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:boreal_taiga", "regions_unexplored:golden_boreal_taiga",
+      "regions_unexplored:old_growth_boreal_taiga", "regions_unexplored:old_growth_golden_boreal_taiga",
+      "regions_unexplored:blackwood_taiga", "regions_unexplored:pine_taiga", "regions_unexplored:cold_boreal_taiga",
+      "regions_unexplored:cold_river"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone*2", "minecraft:mossy_cobblestone*2", "regions_unexplored:mossy_stone"],
+  "silt": ["regions_unexplored:peat_mud*3", "minecraft:gravel*2", "minecraft:clay"],
+  "shore": ["keep*4", "regions_unexplored:peat_podzol*2", "regions_unexplored:peat_coarse_dirt", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:gravel*3", "regions_unexplored:peat_dirt"],
+  "flats": ["keep*3", "regions_unexplored:peat_podzol"],
+  "patch_size": 5,
+  "shore_height": 1
+}

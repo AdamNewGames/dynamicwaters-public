@@ -58,7 +58,10 @@ public final class ForgeEvents {
 
     @SubscribeEvent
     public static void onLevelUnload(LevelEvent.Unload event) {
-        if (event.getLevel() instanceof ServerLevel level) FlowZones.onLevelUnload(level);
+        if (event.getLevel() instanceof ServerLevel level) {
+            FlowZones.onLevelUnload(level);
+            com.AdamNew.dynamicwaters.LivingCurrent.onLevelUnload(level);
+        }
     }
 
     @SubscribeEvent
@@ -67,6 +70,7 @@ public final class ForgeEvents {
             SableCompat.tickPhysicsShips(level);
             com.AdamNew.dynamicwaters.ValkyrienCompat.tickShips(level);
             IceFloeSpawner.onLevelTick(level);
+            com.AdamNew.dynamicwaters.LivingCurrent.tick(level);
         }
     }
 

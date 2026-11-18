@@ -1,0 +1,15 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:mountains", "regions_unexplored:highland_fields", "regions_unexplored:towering_cliffs",
+      "regions_unexplored:pine_slopes", "regions_unexplored:rocky_meadow"]
+  },
+  "rapids": ["minecraft:stone*2", "minecraft:cobblestone*2", "regions_unexplored:mossy_stone*2", "minecraft:gravel*2",
+    "regions_unexplored:argillite"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand"],
+  "shore": ["keep*4", "regions_unexplored:stone_grass_block", "regions_unexplored:mossy_stone"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:gravel"],
+  "patch_size": 4,
+  "shore_height": 1
+}

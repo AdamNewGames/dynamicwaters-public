@@ -26,7 +26,7 @@ public final class BasinTile {
     public static final int REGION_SIZE = HydrologyManager.WATERSHED_REGION_SIZE;
     public static final int REGIONS_PER_SIDE = TILE_SIZE / REGION_SIZE;
 
-    public static final int ALGORITHM_VERSION = 94;
+    public static final int ALGORITHM_VERSION = 96;
 
     static final int CS = CoarseHeightField.CELL_SHIFT;
     static final int CELL = CoarseHeightField.CELL_SIZE;
@@ -52,7 +52,12 @@ public final class BasinTile {
     static final double WIDTH_POWER = 0.42;
 
     static double riverWidth(double rain) {
-        return Mth.clamp(WIDTH_K * Math.pow(rain, WIDTH_POWER), MIN_WIDTH, MAX_WIDTH);
+        return Mth.clamp(WIDTH_K * Math.pow(rain, WIDTH_POWER), MIN_WIDTH, MAX_WIDTH)
+                * com.AdamNew.dynamicwaters.HydrologyManager.riverScale().mountainWidth();
+    }
+
+    static double maxWidth() {
+        return MAX_WIDTH * com.AdamNew.dynamicwaters.HydrologyManager.riverScale().mountainWidth();
     }
     static final float EPS = 1e-3f;
 
@@ -166,6 +171,8 @@ public final class BasinTile {
 
     static final double ALONGSIDE_GAP = 4.0;
     static final int ALONGSIDE_DROP = 4;
+
+    static final int JUNCTION_RAISE = 4, JUNCTION_RAISE_NODES = 12;
 
     static final float ROUTE_NOISE = 0.05f;
 
@@ -321,7 +328,7 @@ public final class BasinTile {
     }
 
     private record SeamKey(int tileX, int tileZ, long seed, int seaLevel, int threshold, boolean lakes,
-            boolean tunnels, boolean dynamicRivers, double canyonHeight, boolean normalTunnels) {
+            boolean tunnels, boolean dynamicRivers, double canyonHeight, boolean normalTunnels, LowlandCut.Settings cut) {
     }
 
     private static final java.util.concurrent.ConcurrentHashMap<SeamKey, TileSeams> SEAM_EXITS =
@@ -405,7 +412,8 @@ public final class BasinTile {
 
     private static SeamKey seamKey(int tileX, int tileZ, long seed, int seaLevel, int threshold, boolean lakes) {
         return new SeamKey(tileX, tileZ, seed, seaLevel, threshold, lakes, Config.MOUNTAIN_RIVER_TUNNELS.get(),
-                Config.dynamicNormalRivers(), Config.NORMAL_RIVER_CANYON_HEIGHT.get(), Config.NORMAL_RIVER_TUNNELS.get());
+                Config.dynamicNormalRivers(), Config.NORMAL_RIVER_CANYON_HEIGHT.get(), Config.NORMAL_RIVER_TUNNELS.get(),
+                LowlandCut.settings());
     }
 
     private static void rememberSeams(SeamKey key, TileSeams seams) {
@@ -619,6 +627,7 @@ public final class BasinTile {
             goUnderground();
             traceChannels();
             lowerAlongside();
+            raiseIntoJunctions();
             WatershedStats.tileExtractNanos.add(System.nanoTime() - t);
             labDumpTile();
         }
@@ -781,6 +790,7 @@ public final class BasinTile {
             t = System.nanoTime();
             stampSinks();
             feedField();
+            riverChance();
             flood();
             computeD8();
             accumulate();
@@ -2530,11 +2540,17 @@ public final class BasinTile {
             final double[] dry = new double[gw * gh];
             final DensityFunction humidity = randomState.router().vegetation();
             final SimplexNoise noise = densityNoise(seed);
+
+            final double[] chance = RiverChance.any() ? new double[gw * gh] : null;
             for (int b = 0; b < gh; b++) {
                 for (int a = 0; a < gw; a++) {
                     dry[b * gw + a] = plainDryness(humidity, noise, ((gi0 + a) * g) << CS, ((gj0 + b) * g) << CS, seaLevel);
+                    if (chance != null) {
+                        chance[b * gw + a] = RiverChance.at(((gi0 + a) * g) << CS, ((gj0 + b) * g) << CS, generator, randomState);
+                    }
                 }
             }
+            riverChance = chance != null ? new float[N] : null;
             for (int c = 0; c < N; c++) {
                 final int wx = cx0 + (c & W_MASK), wz = cz0 + (c >> W_SHIFT);
                 final int a = Math.floorDiv(wx, g) - gi0, b = Math.floorDiv(wz, g) - gj0;
@@ -2543,6 +2559,22 @@ public final class BasinTile {
                 final double d = turned(Mth.lerp(tz, Mth.lerp(tx, dry[k], dry[k + 1]), Mth.lerp(tx, dry[k + gw], dry[k + gw + 1])));
                 dryness[c] = (float) d;
                 rain[c] = (int) Math.round(RAIN_UNITS * Math.pow(DENSITY_WET / DENSITY_DRY, d));
+                if (chance != null) {
+                    riverChance[c] = (float) Mth.lerp(tz, Mth.lerp(tx, chance[k], chance[k + 1]),
+                            Mth.lerp(tx, chance[k + gw], chance[k + gw + 1]));
+                }
+            }
+        }
+
+        private float[] riverChance;
+
+        void riverChance() {
+            if (riverChance == null) return;
+            for (int c = 0; c < N; c++) {
+                final float k = riverChance[c];
+                if (k >= 1.0f) continue;
+                needRain[c] = k <= 0.01f ? Integer.MAX_VALUE / 4
+                        : (int) Math.min(Integer.MAX_VALUE / 4, Math.round(needRain[c] / (double) k));
             }
         }
 
@@ -2597,7 +2629,11 @@ public final class BasinTile {
             }
 
             final boolean corridor = !Config.NORMAL_RIVER_TUNNELS.get();
-            final double reachOut = corridor ? HydrologyManager.LOWLAND_CORRIDOR_REACH : 0.0;
+
+            final boolean cutTunnels = corridor && LowlandCut.anyTunnel();
+            final boolean cutValleys = corridor && LowlandCut.anyValley();
+            final double[] shares = new double[2];
+            final double reachOut = corridor ? HydrologyManager.lowlandCorridorReach() : 0.0;
             final double[] onRiver = new double[2];
 
             ground0 = corridor ? h.clone() : null;
@@ -2637,7 +2673,10 @@ public final class BasinTile {
                             final double x = ((cx0 + i) << CS) + CELL * 0.5;
 
                             double bestOut = Double.MAX_VALUE, bestR = 0.0, bestX = 0.0, bestZ = 0.0;
+                            double bestFullOut = 0.0, bestFullR = 0.0;
                             boolean bestDelta = false;
+                            RiverGraphEdge bestEdge = null;
+                            double valleyLowest = Double.MAX_VALUE;
                             for (int e = 0; e < ne; e++) {
                                 if (x < bb[e * 4] || x > bb[e * 4 + 1] || z < bb[e * 4 + 2] || z > bb[e * 4 + 3]) continue;
                                 final RiverGraphEdge edge = edges.get(e);
@@ -2645,12 +2684,22 @@ public final class BasinTile {
                                         : edge.fractal().intersectDistance(x, z);
                                 if (dSq > radSq[e]) continue;
 
+                                boolean tunnelled = false;
+                                if (cutTunnels && !edge.delta()) {
+                                    HydrologyManager.cutSharesAt(edge, x, z, onRiver[0], onRiver[1],
+                                            groundAt(ground0, onRiver[0], onRiver[1]), generator, randomState, shares);
+                                    if (shares[1] >= 0.5) {
+                                        if (!Config.MOUNTAIN_RIVER_TUNNELS.get()) continue;
+                                        tunnelled = true;
+                                    }
+                                }
+
                                 final double waterR = HydrologyManager.routeWaterRadius(edge, x, z);
                                 final double rc = waterR + 2.0;
                                 if (dSq <= rc * rc) {
                                     mainRiver[c] = true;
                                     sink[c] = true;
-                                    if (corridor) h[c] = Math.min(h[c], seaLevel);
+                                    if (corridor && !tunnelled) h[c] = Math.min(h[c], seaLevel);
                                     break;
                                 }
 
@@ -2661,25 +2710,51 @@ public final class BasinTile {
                                         break;
                                     }
                                 }
-                                if (corridor) {
+                                if (corridor && !tunnelled) {
                                     final double out = Math.sqrt(dSq) - waterR;
+
+                                    final double fullR = HydrologyManager.waterRadiusAt(edge, x, z);
+                                    final double fullOut = Math.sqrt(dSq) - fullR;
                                     if (out < bestOut) {
                                         bestOut = out;
                                         bestR = waterR;
+                                        bestFullOut = fullOut;
+                                        bestFullR = fullR;
                                         bestX = onRiver[0];
                                         bestZ = onRiver[1];
                                         bestDelta = edge.delta();
+                                        bestEdge = edge;
+                                    }
+
+                                    if (cutValleys && !edge.delta() && out > 0.0 && out < reachOut) {
+                                        final double rg = groundAt(ground0, onRiver[0], onRiver[1]);
+                                        HydrologyManager.cutSharesAt(edge, x, z, onRiver[0], onRiver[1], rg, generator,
+                                                randomState, shares);
+                                        if (shares[0] > 0.0) {
+                                            valleyLowest = Math.min(valleyLowest, HydrologyManager.lowlandRouteGround(x, z,
+                                                    ground0[c], out, waterR, fullOut, fullR, rg, shares[0], shares[1], seaLevel, false));
+                                        }
                                     }
                                 }
                             }
+                            if (corridor && !sink[c] && valleyLowest < h[c]) h[c] = (float) valleyLowest;
                             if (corridor && !sink[c] && bestOut < reachOut) {
                                 final double riverGround = groundAt(ground0, bestX, bestZ);
+
+                                double valley = 0.0, tunnel = 0.0;
+                                if (!bestDelta && bestEdge != null) {
+                                    HydrologyManager.cutSharesAt(bestEdge, x, z, bestX, bestZ, riverGround, generator,
+                                            randomState, shares);
+                                    valley = shares[0];
+                                    tunnel = shares[1];
+                                }
                                 final double ground = HydrologyManager.lowlandRouteGround(x, z, h[c], bestOut, bestR,
-                                        riverGround, seaLevel, bestDelta);
+                                        bestFullOut, bestFullR, riverGround, valley, tunnel, seaLevel, bestDelta);
                                 double routed = ground;
-                                if (HydrologyManager.gorgeShare(riverGround) >= 0.5) {
+                                if (1.0 - valley - tunnel >= 0.5 && HydrologyManager.gorgeShare(riverGround) >= 0.5) {
                                     cut[c] = HydrologyManager.lowlandRouteGround(x, z, h[c], bestOut - RIM_CUT_REACH, bestR,
-                                            riverGround, seaLevel, bestDelta) < h[c] - RIM_CUT_DEPTH;
+                                            bestFullOut - RIM_CUT_REACH, bestFullR, riverGround, 0.0, 0.0, seaLevel,
+                                            bestDelta) < h[c] - RIM_CUT_DEPTH;
 
                                     if (cut[c]) routed = Math.min(routed, seaLevel + FALL_FLOOR_SLOPE * bestOut);
                                 }
@@ -3126,7 +3201,7 @@ public final class BasinTile {
                 final int i = c & W_MASK, j = c >> W_SHIFT;
                 final int tx = Math.floorDiv(cx0 + i, CORE), tz = Math.floorDiv(cz0 + j, CORE);
                 final int fi = (d & W_MASK) - i, fj = (d >> W_SHIFT) - j;
-                final int reach = (int) Math.ceil((width[c] + MAX_WIDTH + FUSE_WIDE_GAP) / CELL);
+                final int reach = (int) Math.ceil((width[c] + maxWidth() + FUSE_WIDE_GAP) / CELL);
                 stamp++;
                 own[c] = stamp;
                 for (int s = 0, e = d; s < FUSE_OWN_CELLS && e >= 0; s++, e = downstream(e)) own[e] = stamp;
@@ -4165,7 +4240,7 @@ public final class BasinTile {
 
         private double lacksBeside(double x, double z, double ux, double uz, double width, double level, int c0, int c1) {
             final int up = mainUp(c0), down = downstream(c1);
-            final double reach = width + MAX_WIDTH + MEANDER_RIVER_APART + MEANDER_GAP_MAX;
+            final double reach = width + maxWidth() + MEANDER_RIVER_APART + MEANDER_GAP_MAX;
             for (double s = 2.0; s <= reach; s += 2.0) {
                 final int ci = (int) Math.round((x + ux * s) / CELL) - cx0, cj = (int) Math.round((z + uz * s) / CELL) - cz0;
                 if (ci < 0 || cj < 0 || ci >= W || cj >= W) return 0.0;
@@ -4228,7 +4303,7 @@ public final class BasinTile {
                 if (s >= limit) break;
             }
 
-            final double far = limit + MAX_WIDTH + MEANDER_RIVER_GAP + MEANDER_GAP_MAX;
+            final double far = limit + maxWidth() + MEANDER_RIVER_GAP + MEANDER_GAP_MAX;
             for (double s = limit + 2.0; s <= far; s += 2.0) {
                 final int ci = (int) Math.round((x + ux * s) / CELL) - cx0, cj = (int) Math.round((z + uz * s) / CELL) - cz0;
                 if (ci < 0 || cj < 0 || ci >= W || cj >= W) break;
@@ -4481,6 +4556,45 @@ public final class BasinTile {
             }
         }
 
+        private void raiseIntoJunctions() {
+            final Map<Long, List<WatershedPath>> byHead = new HashMap<>();
+            for (List<WatershedPath> list : tile.pathsByRegion.values()) {
+                for (WatershedPath p : list) {
+                    if (p.validNodeCount >= 2) byHead.computeIfAbsent(nodeKey(p, p.validNodeCount - 1), k -> new ArrayList<>()).add(p);
+                }
+            }
+            final java.util.IdentityHashMap<WatershedPath, int[]> raised = new java.util.IdentityHashMap<>();
+            for (List<WatershedPath> list : tile.pathsByRegion.values()) {
+                for (WatershedPath t : list) {
+                    if (t.validNodeCount < 2 || raised.containsKey(t)) continue;
+                    final List<WatershedPath> out = byHead.get(nodeKey(t, 0));
+                    if (out == null) continue;
+                    int level = Integer.MAX_VALUE;
+                    for (WatershedPath o : out) {
+                        if (o != t) level = Math.min(level, o.segmentsY[o.validNodeCount - 1]);
+                    }
+                    if (level == Integer.MAX_VALUE || t.segmentsY[0] >= level || level - t.segmentsY[0] > JUNCTION_RAISE) continue;
+                    int k = 0;
+                    final int most = Math.min(t.validNodeCount, JUNCTION_RAISE_NODES);
+                    while (k < most && t.segmentsY[k] < level) k++;
+                    if (k >= most) continue;
+                    final int[] ys = t.segmentsY.clone();
+                    for (int i = 0; i < k; i++) ys[i] = level;
+                    raised.put(t, ys);
+                }
+            }
+            if (raised.isEmpty()) return;
+            for (List<WatershedPath> list : tile.pathsByRegion.values()) {
+                for (int i = 0; i < list.size(); i++) {
+                    final WatershedPath p = list.get(i);
+                    final int[] ys = raised.get(p);
+                    if (ys == null) continue;
+                    list.set(i, new WatershedPath(p.nodeCount, p.validNodeCount, p.hitMainRiver, p.segmentsX, p.segmentsZ,
+                            ys, p.segmentsTerrainY, p.segmentWidths));
+                }
+            }
+        }
+
         private static long nodeKey(WatershedPath p, int i) {
             return ((long) Math.round(p.segmentsX[i]) << 32) ^ (Math.round(p.segmentsZ[i]) & 0xFFFFFFFFL);
         }
@@ -4488,7 +4602,7 @@ public final class BasinTile {
         private static int levelAlongside(WatershedPath t, int k, List<WatershedPath> all,
                 java.util.IdentityHashMap<WatershedPath, int[]> lowered) {
             final double x = t.segmentsX[k], z = t.segmentsZ[k], w = t.segmentWidths[k];
-            final double reach = w + MAX_WIDTH + ALONGSIDE_GAP;
+            final double reach = w + maxWidth() + ALONGSIDE_GAP;
             int lowest = Integer.MAX_VALUE;
             for (WatershedPath m : all) {
                 if (m == t) continue;
@@ -4507,7 +4621,8 @@ public final class BasinTile {
             final double x = t.segmentsX[0], z = t.segmentsZ[0];
             for (WatershedPath m : all) {
                 if (m == t) continue;
-                if (x < m.minX - MAX_WIDTH || x > m.maxX + MAX_WIDTH || z < m.minZ - MAX_WIDTH || z > m.maxZ + MAX_WIDTH) continue;
+                final double wide = maxWidth();
+                if (x < m.minX - wide || x > m.maxX + wide || z < m.minZ - wide || z > m.maxZ + wide) continue;
                 final WatershedPath.RiverNodeData d = m.getClosestNodeData(x, z);
                 if (d.distance < d.width && d.y <= t.segmentsY[0]) return true;
             }
@@ -4648,6 +4763,7 @@ public final class BasinTile {
 
             int[] ys = new int[n], tys = new int[n];
             double[] ws = new double[n];
+            final boolean cutValleysNodes = !Config.NORMAL_RIVER_TUNNELS.get() && LowlandCut.anyValley();
 
             boolean[] fixed = new boolean[n];
 
@@ -4678,6 +4794,13 @@ public final class BasinTile {
                 }
                 fixed[n - 1 - k] = inLake || (startsAtLake && k < LAKE_SILL_NODES);
                 ys[k] = (int) Math.round(water - incision);
+
+                if (cutValleysNodes && !fixed[n - 1 - k]) {
+                    final double valleyGround = HydrologyManager.valleyGroundAt(xs[k], zs[k], terrain, generator, randomState);
+                    if (valleyGround != Double.MAX_VALUE) {
+                        ys[k] = Math.min(ys[k], (int) Math.floor(valleyGround - Math.max(1.0, incision)));
+                    }
+                }
                 if (underCells != null && underCells[cc]) underNode[n - 1 - k] = true;
 
                 if (ys[k] < lakeFloorAt[cc]) {

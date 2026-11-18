@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:black_forest", "biomeswevegone:canadian_shield", "biomeswevegone:cika_woods",
+      "biomeswevegone:coniferous_forest", "biomeswevegone:maple_taiga", "biomeswevegone:aspen_boreal"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone*2", "minecraft:mossy_cobblestone*2", "biomeswevegone:rocky_stone"],
+  "silt": ["minecraft:gravel*3", "biomeswevegone:peat", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:podzol*2", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:podzol"],
+  "patch_size": 5,
+  "shore_height": 1
+}

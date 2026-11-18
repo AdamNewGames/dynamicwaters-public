@@ -1,0 +1,13 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:windswept_desert"]
+  },
+  "rapids": ["biomeswevegone:windswept_sand*2", "minecraft:gravel*2", "biomeswevegone:windswept_sandstone"],
+  "silt": ["biomeswevegone:windswept_sand*4", "minecraft:clay"],
+  "shore": ["keep*3", "biomeswevegone:windswept_sand*2"],
+  "bars": ["biomeswevegone:windswept_sand*3"],
+  "flats": ["keep*3", "biomeswevegone:windswept_sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

@@ -1,0 +1,13 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:dacite_ridges", "biomeswevegone:dacite_shore"]
+  },
+  "rapids": ["biomeswevegone:dacite*2", "biomeswevegone:dacite_cobblestone*2", "minecraft:gravel*2"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand"],
+  "shore": ["keep*3", "biomeswevegone:dacite_cobblestone*2", "biomeswevegone:podzol_dacite"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:gravel"],
+  "patch_size": 4,
+  "shore_height": 1
+}

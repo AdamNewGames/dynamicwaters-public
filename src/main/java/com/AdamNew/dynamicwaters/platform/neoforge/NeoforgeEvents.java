@@ -55,7 +55,10 @@ public final class NeoforgeEvents {
 
     @SubscribeEvent
     public static void onLevelUnload(LevelEvent.Unload event) {
-        if (event.getLevel() instanceof ServerLevel level) FlowZones.onLevelUnload(level);
+        if (event.getLevel() instanceof ServerLevel level) {
+            FlowZones.onLevelUnload(level);
+            com.AdamNew.dynamicwaters.LivingCurrent.onLevelUnload(level);
+        }
     }
 
     @SubscribeEvent
@@ -63,6 +66,7 @@ public final class NeoforgeEvents {
         if (event.getLevel() instanceof ServerLevel level) {
             SableCompat.tickPhysicsShips(level);
             IceFloeSpawner.onLevelTick(level);
+            com.AdamNew.dynamicwaters.LivingCurrent.tick(level);
         }
     }
 

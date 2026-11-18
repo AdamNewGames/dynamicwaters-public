@@ -121,6 +121,14 @@ public final class MainRivers
         }
     }
 
+    public static int builtRegionCount() {
+        return regionCache.size();
+    }
+
+    public static List<RiverGraphEdge> builtRegion(int rx, int rz) {
+        return regionCache.get(RiverMathUtils.pack(rx, rz));
+    }
+
     public static List<RiverGraphEdge> getRegion(int rx, int rz,
         ChunkGenerator generator, LevelHeightAccessor level, RandomState randomState)
     {

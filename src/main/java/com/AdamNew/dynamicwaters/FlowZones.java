@@ -49,13 +49,13 @@ public final class FlowZones {
     private FlowZones() {
     }
 
-    public record Zone(int id, int minX, int minY, int minZ, int maxX, int maxY, int maxZ, int direction) {
+    public record Zone(int id, int minX, int minY, int minZ, int maxX, int maxY, int maxZ, int direction, double speed) {
         public boolean contains(int x, int y, int z) {
             return x >= minX && x <= maxX && z >= minZ && z <= maxZ && y >= minY && y <= maxY;
         }
 
         public Vec3 flow() {
-            return direction == STILL ? Vec3.ZERO : DIRECTIONS[direction];
+            return direction == STILL ? Vec3.ZERO : DIRECTIONS[direction].scale(speed);
         }
 
         public int sizeX() {
@@ -104,9 +104,16 @@ public final class FlowZones {
         return zone != null ? zone.flow() : null;
     }
 
-    public static Component describe(int direction) {
+    public static Component describe(int direction, double speed) {
         return direction == STILL ? Component.translatable("dynamicwaters.flow_zone.still")
-                : Component.translatable("dynamicwaters.flow_zone.runs", directionName(direction));
+                : Component.translatable("dynamicwaters.flow_zone.runs", directionName(direction))
+                        .append(" ×" + FlowOverrideBlock.speedText(speed));
+    }
+
+    public static double speed(double stored) {
+        final double least = FlowOverrideBlock.SPEEDS[0], most = FlowOverrideBlock.SPEEDS[FlowOverrideBlock.SPEEDS.length - 1];
+        return Double.isFinite(stored) && stored > 0.0 ? Math.max(least, Math.min(most, stored))
+                : FlowOverrideBlock.pace(FlowOverrideBlock.DEFAULT_SPEED);
     }
 
     public static Component directionName(int direction) {
@@ -121,13 +128,13 @@ public final class FlowZones {
         return List.copyOf(data(level).zones);
     }
 
-    public static Zone add(ServerLevel level, BlockPos a, BlockPos b, int direction) {
+    public static Zone add(ServerLevel level, BlockPos a, BlockPos b, int direction, double speed) {
         final Data data = data(level);
         if (data.zones.size() >= MAX_ZONES) return null;
         final Zone zone = new Zone(data.nextId++,
                 Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()) - DEPTH, Math.min(a.getZ(), b.getZ()),
                 Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()) + 1, Math.max(a.getZ(), b.getZ()),
-                direction(direction));
+                direction(direction), speed(speed));
         data.zones.add(zone);
         changed(level, data);
         return zone;
@@ -208,7 +215,7 @@ public final class FlowZones {
                 final int[] box = z.getIntArray("Box");
                 if (box.length != 6) continue;
                 data.zones.add(new Zone(z.getInt("Id"), box[0], box[1], box[2], box[3], box[4], box[5],
-                        direction(z.getInt("Direction"))));
+                        direction(z.getInt("Direction")), speed(z.contains("Speed") ? z.getFloat("Speed") : 0.0)));
             }
             return data;
         }
@@ -226,6 +233,7 @@ public final class FlowZones {
                 z.putInt("Id", zone.id());
                 z.putIntArray("Box", new int[] {zone.minX(), zone.minY(), zone.minZ(), zone.maxX(), zone.maxY(), zone.maxZ()});
                 z.putInt("Direction", zone.direction());
+                z.putFloat("Speed", (float) zone.speed());
                 list.add(z);
             }
             tag.put("Zones", list);

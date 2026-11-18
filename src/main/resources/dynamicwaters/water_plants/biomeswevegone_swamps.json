@@ -1,0 +1,29 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:bayou", "biomeswevegone:cypress_swamplands", "biomeswevegone:white_mangrove_marshes"]
+  },
+  "lowland": [
+    { "block": "biomeswevegone:tiny_lily_pads", "at": "surface", "calm": true, "depth": [1, 6], "patch_size": 8, "patch_share": 0.35, "chance": 0.45, "salt": 53101 },
+    { "block": "biomeswevegone:flowering_tiny_lily_pads", "at": "surface", "calm": true, "depth": [1, 6], "chance": 0.006, "alone": true, "salt": 53102 },
+    { "block": "biomeswevegone:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.3, "chance": 0.5, "salt": 53103 },
+    { "block": "biomeswevegone:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.3, "chance": 0.5, "salt": 53105 },
+    { "block": "biomeswevegone:cattail_sprout", "at": "shore", "calm": true, "chance": 0.08, "salt": 53107 }
+  ],
+  "mountain": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.05 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.12 },
+    { "block": "biomeswevegone:tiny_lily_pads", "at": "surface", "calm": true, "depth": [1, 6], "patch_size": 8, "patch_share": 0.3, "chance": 0.4, "salt": 53101 },
+    { "block": "biomeswevegone:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.25, "chance": 0.45, "salt": 53103 },
+    { "block": "biomeswevegone:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.25, "chance": 0.45, "salt": 53105 }
+  ],
+  "lake": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.05 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.12 },
+    { "block": "biomeswevegone:tiny_lily_pads", "at": "surface", "calm": true, "depth": [1, 8], "patch_size": 10, "patch_share": 0.4, "chance": 0.5, "salt": 53101 },
+    { "block": "biomeswevegone:flowering_tiny_lily_pads", "at": "surface", "calm": true, "depth": [1, 8], "chance": 0.008, "alone": true, "salt": 53102 },
+    { "block": "biomeswevegone:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.35, "chance": 0.55, "salt": 53103 },
+    { "block": "biomeswevegone:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.35, "chance": 0.55, "salt": 53105 },
+    { "block": "biomeswevegone:cattail_sprout", "at": "shore", "calm": true, "chance": 0.08, "salt": 53107 }
+  ]
+}

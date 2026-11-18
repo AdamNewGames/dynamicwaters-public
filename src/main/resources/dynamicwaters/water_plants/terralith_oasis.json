@@ -1,0 +1,21 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:desert_oasis", "terralith:red_oasis"]
+  },
+  "lowland": [
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "patch_size": 6, "patch_share": 0.3, "chance": 0.2, "salt": 56101 },
+    { "block": "minecraft:sugar_cane", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.45, "chance": 0.85, "height": [2, 3], "salt": 56103 }
+  ],
+  "mountain": [
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.15 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "patch_size": 6, "patch_share": 0.25, "chance": 0.15, "salt": 56101 },
+    { "block": "minecraft:sugar_cane", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.4, "chance": 0.85, "height": [2, 3], "salt": 56103 }
+  ],
+  "lake": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.06 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.2 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 5], "patch_size": 7, "patch_share": 0.35, "chance": 0.25, "salt": 56101 },
+    { "block": "minecraft:sugar_cane", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.5, "chance": 0.9, "height": [2, 3], "salt": 56103 }
+  ]
+}

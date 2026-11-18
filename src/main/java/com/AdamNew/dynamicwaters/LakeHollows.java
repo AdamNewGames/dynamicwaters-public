@@ -98,6 +98,7 @@ public final class LakeHollows {
 
         final int waterY = lake.waterY;
         final LongArrayList members = new LongArrayList();
+        final LongArrayList rim = new LongArrayList();
         final LongOpenHashSet seen = new LongOpenHashSet();
         members.add(start);
         seen.add(start);
@@ -111,7 +112,10 @@ public final class LakeHollows {
                 final long nk = pack(nx, nz);
                 if (!seen.add(nk)) continue;
                 final int gn = groundAt(nx, nz, generator, randomState);
-                if (gn >= waterY) continue;
+                if (gn >= waterY) {
+                    rim.add(nk);
+                    continue;
+                }
                 if (HydrologyManager.lakeWaterAt(lake, nx, nz, gn, generator, randomState)) {
                     touches = true;
                     continue;
@@ -124,11 +128,24 @@ public final class LakeHollows {
                 members.add(nk);
             }
         }
-        final Kind kind = open ? Kind.OPEN : touches && beyondLip ? Kind.FLOODED : Kind.NONE;
+        Kind kind = open ? Kind.OPEN : touches && beyondLip ? Kind.FLOODED : Kind.NONE;
+
+        if (kind == Kind.FLOODED && (cutBelow(members, waterY, generator, randomState)
+                || cutBelow(rim, waterY, generator, randomState))) {
+            kind = Kind.OPEN;
+        }
         if (g.verdicts.size() + members.size() > MEMO_LIMIT) g.verdicts.clear();
         final Verdict verdict = new Verdict(lake, kind);
         for (int k = 0; k < members.size(); k++) g.verdicts.put(members.getLong(k), verdict);
         return kind;
+    }
+
+    private static boolean cutBelow(LongArrayList columns, int waterY, ChunkGenerator generator, RandomState randomState) {
+        for (int k = 0; k < columns.size(); k++) {
+            final long c = columns.getLong(k);
+            if (HydrologyManager.channelBelow((int) (c >> 32), (int) c, waterY, false, generator, randomState)) return true;
+        }
+        return false;
     }
 
     static boolean besideWater(WatershedLake lake, int x, int z, ChunkGenerator generator, RandomState randomState) {

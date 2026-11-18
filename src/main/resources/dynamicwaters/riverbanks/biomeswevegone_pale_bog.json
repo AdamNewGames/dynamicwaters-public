@@ -1,0 +1,13 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:pale_bog"]
+  },
+  "rapids": ["minecraft:gravel*2", "biomeswevegone:packed_pale_mud*2", "minecraft:cobblestone"],
+  "silt": ["biomeswevegone:pale_mud*4", "biomeswevegone:packed_pale_mud"],
+  "shore": ["keep*3", "biomeswevegone:pale_mud*2"],
+  "bars": ["biomeswevegone:pale_mud*3"],
+  "flats": ["keep*2", "biomeswevegone:pale_mud*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

@@ -22,7 +22,8 @@ final class BlockPickerScreen extends com.AdamNew.dynamicwaters.client.gui.DWScr
     private final Screen parent;
     private final Consumer<String> onPick;
 
-    private final boolean plants;
+    private final boolean ground;
+    private final java.util.function.Supplier<List<Block>> source;
     private EditBox search;
     private List<String> shown = List.of();
     private int scroll;
@@ -33,10 +34,21 @@ final class BlockPickerScreen extends com.AdamNew.dynamicwaters.client.gui.DWScr
     }
 
     BlockPickerScreen(Screen parent, Consumer<String> onPick, boolean plants) {
-        super(Component.translatable(plants ? "dynamicwaters.gui.plants.pick" : "dynamicwaters.gui.banks.pick"));
+        this(parent, onPick, plants ? "dynamicwaters.gui.plants.pick" : "dynamicwaters.gui.banks.pick",
+                plants ? BlockSwatch::plantable : BlockSwatch::dressable, !plants);
+    }
+
+    BlockPickerScreen(Screen parent, Consumer<String> onPick, String titleKey, java.util.function.Supplier<List<Block>> source) {
+        this(parent, onPick, titleKey, source, false);
+    }
+
+    private BlockPickerScreen(Screen parent, Consumer<String> onPick, String titleKey,
+            java.util.function.Supplier<List<Block>> source, boolean ground) {
+        super(Component.translatable(titleKey));
         this.parent = parent;
         this.onPick = onPick;
-        this.plants = plants;
+        this.source = source;
+        this.ground = ground;
     }
 
     @Override
@@ -60,11 +72,11 @@ final class BlockPickerScreen extends com.AdamNew.dynamicwaters.client.gui.DWScr
     private void refilter() {
         final String q = search.getValue().trim().toLowerCase(Locale.ROOT);
         final List<String> out = new ArrayList<>();
-        if (!plants && (q.isEmpty() || BlockSwatch.name(RiverbankPaletteDraft.KEEP).getString().toLowerCase(Locale.ROOT).contains(q)
+        if (ground && (q.isEmpty() || BlockSwatch.name(RiverbankPaletteDraft.KEEP).getString().toLowerCase(Locale.ROOT).contains(q)
                 || RiverbankPaletteDraft.KEEP.contains(q))) {
             out.add(RiverbankPaletteDraft.KEEP);
         }
-        for (Block b : plants ? BlockSwatch.plantable() : BlockSwatch.dressable()) {
+        for (Block b : source.get()) {
             final String id = BlockSwatch.idOf(b);
             if (q.isEmpty() || id.contains(q) || b.getName().getString().toLowerCase(Locale.ROOT).contains(q)) out.add(id);
         }
@@ -107,8 +119,12 @@ final class BlockPickerScreen extends com.AdamNew.dynamicwaters.client.gui.DWScr
                 } else {
                     final Block b = BlockSwatch.block(id);
 
-                    if (b != null && b.asItem() != net.minecraft.world.item.Items.AIR) g.renderItem(new ItemStack(b), x + 1, y + 1);
-                    else if (b != null) BlockSwatch.draw(g, id, x + 1, y + 1, 16);
+                    if (b != null && b.asItem() != net.minecraft.world.item.Items.AIR) {
+                        com.AdamNew.dynamicwaters.client.gui.SafeItemIcon.render(g, new ItemStack(b), x + 1, y + 1,
+                                () -> BlockSwatch.draw(g, id, x + 1, y + 1, 16));
+                    } else if (b != null) {
+                        BlockSwatch.draw(g, id, x + 1, y + 1, 16);
+                    }
                 }
             }
         }

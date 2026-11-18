@@ -12,7 +12,6 @@ import net.minecraft.world.level.block.SeaPickleBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.WaterlilyBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.slf4j.Logger;
 
 import java.util.Locale;
@@ -59,6 +58,8 @@ public final class WaterPlant {
 
     final int salt;
 
+    final BlockState[] parts;
+
     private WaterPlant(String id, BlockState state, boolean ownState, At at, double chance, int minDepth, int maxDepth,
             boolean calm, int patchSize, double patchShare, boolean alone, int minHeight, int maxHeight, int salt) {
         this.id = id;
@@ -75,14 +76,15 @@ public final class WaterPlant {
         this.minHeight = minHeight;
         this.maxHeight = maxHeight;
         this.salt = salt;
+        this.parts = state.is(Blocks.KELP) || state.is(Blocks.KELP_PLANT) ? null : TallPlant.parts(state);
     }
 
     boolean isKelp() {
         return state.is(Blocks.KELP) || state.is(Blocks.KELP_PLANT);
     }
 
-    boolean isDouble() {
-        return state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF);
+    boolean isTall() {
+        return parts != null;
     }
 
     boolean isPickles() {

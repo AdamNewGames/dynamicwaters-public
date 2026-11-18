@@ -51,6 +51,8 @@ public final class WatershedStats {
     public static final LongAdder riverBiomeColumns = new LongAdder();
     public static final LongAdder riverBiomeNanos = new LongAdder();
 
+    public static final LongAdder openedGroundChunks = new LongAdder();
+
     public static final LongAdder iceFloeTicks = new LongAdder();
     public static final LongAdder iceFloeNanos = new LongAdder();
 
@@ -155,6 +157,7 @@ public final class WatershedStats {
         riverBiomeChunks.reset();
         riverBiomeColumns.reset();
         riverBiomeNanos.reset();
+        openedGroundChunks.reset();
         iceFloeTicks.reset();
         iceFloeNanos.reset();
         iceFloeLooks.reset();
@@ -231,6 +234,7 @@ public final class WatershedStats {
         sb.append(String.format("  mountain river biome: %d chunks asked, %d got it (%d columns), %.3f ms a chunk%n",
                 riverBiomeAsked.sum(), riverBiomeChunks.sum(), riverBiomeColumns.sum(),
                 riverBiomeNanos.sum() / 1.0e6 / Math.max(1L, riverBiomeAsked.sum())));
+        sb.append(String.format("  cut-open ground given the surface's biome: %d chunks%n", openedGroundChunks.sum()));
         sb.append(String.format("  hollows beside a lake's water: %d columns flooded, %d raised to hold it%n",
                 lakeHollowsFlooded.sum(), lakeHollowsHeld.sum()));
         sb.append(String.format("  seam sides: %d taken over (%d for water pooled by the seam), %d kept to the tile's own routing;"

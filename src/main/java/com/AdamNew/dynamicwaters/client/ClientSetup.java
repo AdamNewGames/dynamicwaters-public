@@ -6,5 +6,6 @@ public class ClientSetup {
             final net.minecraft.client.multiplayer.ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
             return level == null || level.dimension() == net.minecraft.world.level.Level.OVERWORLD;
         });
+        com.AdamNew.dynamicwaters.HydrologyManager.setDrawnLevel(() -> net.minecraft.client.Minecraft.getInstance().level);
     }
 }

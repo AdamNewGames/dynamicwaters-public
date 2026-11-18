@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:ashen_woodland"]
+  },
+  "rapids": ["regions_unexplored:ashen_dirt*2", "minecraft:gravel*2", "minecraft:cobblestone"],
+  "silt": ["regions_unexplored:volcanic_ash*3", "regions_unexplored:ashen_dirt*2"],
+  "shore": ["keep*3", "regions_unexplored:volcanic_ash*2", "regions_unexplored:ashen_dirt"],
+  "bars": ["regions_unexplored:volcanic_ash*3", "minecraft:gravel"],
+  "flats": ["keep*3", "regions_unexplored:volcanic_ash"],
+  "patch_size": 5,
+  "shore_height": 1
+}

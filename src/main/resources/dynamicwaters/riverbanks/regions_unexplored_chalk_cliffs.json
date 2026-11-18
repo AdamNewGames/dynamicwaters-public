@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:chalk_cliffs"]
+  },
+  "rapids": ["regions_unexplored:chalk*3", "minecraft:gravel*2", "minecraft:cobblestone"],
+  "silt": ["regions_unexplored:chalk*2", "minecraft:sand*2", "minecraft:clay"],
+  "shore": ["keep*3", "regions_unexplored:chalk*2", "minecraft:gravel"],
+  "bars": ["minecraft:sand*2", "regions_unexplored:chalk"],
+  "flats": ["keep*3", "regions_unexplored:chalk"],
+  "patch_size": 5,
+  "shore_height": 1
+}

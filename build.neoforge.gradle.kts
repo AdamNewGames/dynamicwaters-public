@@ -41,13 +41,19 @@ neoForge {
 			propsList("mod", "dev_jvm_args_mixin_debug")
 		register("client") {
 			client()
-			gameDirectory = file("run/")
+
+			gameDirectory = file(providers.gradleProperty("clientDir").getOrElse("run"))
 			ideName = "NeoForge Client (${stonecutter.current.version})"
 			programArgument("--username=Dev")
 			jvmArguments.addAll(devJvmArgs)
 
 			providers.gradleProperty("quickPlay").orNull?.let {
 				programArgument("--quickPlaySingleplayer")
+				programArgument(it)
+			}
+
+			providers.gradleProperty("quickPlayServer").orNull?.let {
+				programArgument("--quickPlayMultiplayer")
 				programArgument(it)
 			}
 		}

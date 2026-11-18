@@ -24,9 +24,11 @@ public class WaterParticleMixin {
 
         if (!((Object)this instanceof LiquidBlock)) return;
 
+        com.AdamNew.dynamicwaters.client.RiverFoam.noticeWater(level, pos, state.getFluidState());
+
         if (state.getFluidState().isSource() && level.getBlockState(pos.above()).isAir()) {
             BlockPos globalPos = com.AdamNew.dynamicwaters.SableCompat.getGlobalBlockPos(level, pos);
-            Vec3 flow = HydrologyManager.getRiverFlow(globalPos.getX() + 0.5, globalPos.getY(), globalPos.getZ() + 0.5, level);
+            Vec3 flow = HydrologyManager.seenRiverFlow(globalPos.getX() + 0.5, globalPos.getY(), globalPos.getZ() + 0.5, level);
 
             if (flow.lengthSqr() > 0.01) {
                 if (com.AdamNew.dynamicwaters.Config.ENABLE_RIVER_SOUND.get()) {
@@ -44,9 +46,9 @@ public class WaterParticleMixin {
                     }
                 }
 
-                if (com.AdamNew.dynamicwaters.Config.ENABLE_RIVER_PARTICLES.get()) {
-                    if (random.nextInt(com.AdamNew.dynamicwaters.Config.RIVER_PARTICLE_DENSITY.get()) == 0) {
-                        int count = 1 + random.nextInt(2);
+                final boolean oldParticles = com.AdamNew.dynamicwaters.Config.OLD_RIVER_PARTICLES.get();
+                if (oldParticles && random.nextInt(com.AdamNew.dynamicwaters.Config.RIVER_PARTICLE_DENSITY.get()) == 0) {
+                    int count = 1 + random.nextInt(2);
                     for (int i = 0; i < count; i++) {
                         double px = pos.getX() + random.nextDouble();
 
@@ -59,11 +61,11 @@ public class WaterParticleMixin {
 
                         addAlwaysVisibleParticle(level, com.AdamNew.dynamicwaters.registry.ModParticles.RIVER_BUBBLE.get(), px, py, pz, vx, vy, vz);
                     }
-                    }
+                }
 
-                    if (flow.lengthSqr() > 1.2 && random.nextInt(3) == 0) {
-                        addAlwaysVisibleParticle(level, ParticleTypes.CLOUD, pos.getX() + random.nextDouble(), pos.getY() + 0.9, pos.getZ() + random.nextDouble(), flow.x * 0.1, 0.05, flow.z * 0.1);
-                    }
+                if (oldParticles && !com.AdamNew.dynamicwaters.Config.ENABLE_RIVER_FOAM.get()
+                        && flow.lengthSqr() > 2.4 && random.nextInt(3) == 0) {
+                    addAlwaysVisibleParticle(level, ParticleTypes.CLOUD, pos.getX() + random.nextDouble(), pos.getY() + 0.9, pos.getZ() + random.nextDouble(), flow.x * 0.1, 0.05, flow.z * 0.1);
                 }
             }
         }

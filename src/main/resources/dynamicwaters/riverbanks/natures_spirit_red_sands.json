@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:scorched_dunes", "natures_spirit:red_sandy_river", "natures_spirit:red_beach"]
+  },
+  "rapids": ["natures_spirit:chert*3", "minecraft:red_sandstone*2", "minecraft:gravel"],
+  "silt": ["minecraft:red_sand*4", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:red_sand*2", "natures_spirit:chert"],
+  "bars": ["minecraft:red_sand*3", "minecraft:gravel"],
+  "flats": ["keep*3", "minecraft:red_sand*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

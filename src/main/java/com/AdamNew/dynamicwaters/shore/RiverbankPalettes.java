@@ -30,6 +30,30 @@ public final class RiverbankPalettes {
     private static final String[] BUILT_IN = {
             "default.json",
 
+            "regions_unexplored_peat_wetlands.json", "regions_unexplored_fungal_fen.json",
+            "regions_unexplored_peat_taiga.json", "regions_unexplored_silt_lands.json",
+            "regions_unexplored_silt_drylands.json", "regions_unexplored_red_outback.json",
+            "regions_unexplored_sand_deserts.json", "regions_unexplored_chalk_cliffs.json",
+            "regions_unexplored_ashen_woodland.json", "regions_unexplored_rainforest.json",
+            "regions_unexplored_tropic_coast.json", "regions_unexplored_snowlands.json",
+            "regions_unexplored_highlands.json", "regions_unexplored_broadleaf.json",
+            "regions_unexplored_redwoods.json", "regions_unexplored_meadows.json", "regions_unexplored_beaches.json",
+            "biomeswevegone_swamps.json", "biomeswevegone_pale_bog.json", "biomeswevegone_windswept_desert.json",
+            "biomeswevegone_deserts.json", "biomeswevegone_badlands.json", "biomeswevegone_savannas.json",
+            "biomeswevegone_dacite.json", "biomeswevegone_conifers.json", "biomeswevegone_frost.json",
+            "biomeswevegone_jungles.json", "biomeswevegone_enchanted.json", "biomeswevegone_broadleaf.json",
+            "biomeswevegone_meadows.json", "biomeswevegone_basalt_barrera.json", "biomeswevegone_rainbow_beach.json",
+            "terralith_volcanic.json", "terralith_white_cliffs.json", "terralith_white_mesa.json",
+            "terralith_painted_canyons.json", "terralith_granite.json", "terralith_yellowstone.json",
+            "terralith_shield.json", "terralith_gravel_wastes.json", "terralith_amethyst.json", "terralith_moonlight.json",
+            "terralith_cold_marsh.json", "terralith_oasis.json", "terralith_caldera.json",
+            "natures_spirit_wetlands.json", "natures_spirit_tropics.json", "natures_spirit_pink_sands.json",
+            "natures_spirit_sandy_soil.json", "natures_spirit_xeric.json", "natures_spirit_chert_uplands.json",
+            "natures_spirit_stratified.json", "natures_spirit_red_sands.json", "natures_spirit_white_cliffs.json",
+            "natures_spirit_kaolin_fields.json", "natures_spirit_red_moss.json", "natures_spirit_alpine.json",
+            "natures_spirit_redwoods.json", "natures_spirit_blossom_woods.json", "natures_spirit_broadleaf.json",
+            "natures_spirit_meadows.json",
+
             "tundra.json", "wetland.json", "mangrove.json", "dark_forest.json", "red_canyons.json", "hot_desert.json",
             "rainforest.json", "dry_grassland.json", "alpine_meadow.json", "highlands.json", "conifer_forest.json",
             "broadleaf_forest.json", "grassland.json", "mushroom_isle.json", "rocky_coast.json", "sea_coast.json",
@@ -58,7 +82,7 @@ public final class RiverbankPalettes {
     }
 
     public static List<String> builtInFileNames() {
-        return List.of(BUILT_IN);
+        return BiomeMatch.forInstalledMods(BUILT_IN, RiverbankPalettes::resource);
     }
 
     public static String builtInText(String fileName) {
@@ -175,6 +199,8 @@ public final class RiverbankPalettes {
             LOG.warn("Dynamic Waters: riverbank palette {} is not a JSON object: {}", source, e.getMessage());
             return null;
         }
+
+        if (BiomeMatch.modMissing(o)) return null;
         final RiverbankPalette.Mix[] places = new RiverbankPalette.Mix[RiverbankPalette.PLACES.length];
         for (int p = 0; p < places.length; p++) places[p] = mix(source, o, RiverbankPalette.PLACES[p]);
         return new RiverbankPalette(source, BiomeMatch.parse("riverbank palette", source, o), BiomeMatch.flag(o, "enabled", true),
@@ -267,6 +293,7 @@ public final class RiverbankPalettes {
             | `where.climate` | `{"temperature": [1.0, 2.5], "downfall": [0.0, 0.3]}` | ...or in a biome whose climate falls in this window. |
             | `where.not` | `["minecraft:dark_forest", "#c:is_swamp"]` | Never in these biomes, nor in a biome with these `#tags`. |
             | `enabled` | `false` | Leave the cut ground as it is wherever this palette applies. |
+            | `mod` | `"regions_unexplored"` | Only with this mod installed - for its biomes, in its blocks. |
             | `rapids`, `silt`, `shore`, `slope`, `bars`, `flats` | `["minecraft:gravel*3", "keep"]` | The blocks of each place (see above). |
             | `patch_size` | `5` | How wide a spot is, in blocks (1 = block by block). The beds of fast water break finer. |
             | `shore_height` | `1` | How many blocks over the water the shore reaches, give or take one. |

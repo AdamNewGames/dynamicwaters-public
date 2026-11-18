@@ -3,11 +3,26 @@ package com.AdamNew.dynamicwaters.network;
 import com.AdamNew.dynamicwaters.HydrologyManager;
 
 public class ModNetwork {
+    private static volatile boolean freshConnection = true;
+
+    public static void onClientLoggingOut() {
+        freshConnection = true;
+    }
+
     public static void receive(SyncSeedPacket payload, boolean ownServer) {
         if (ownServer) return;
+        final com.AdamNew.dynamicwaters.WorldShape.Scale scale = new com.AdamNew.dynamicwaters.WorldShape.Scale(
+                payload.lowlandWidth(), payload.lowlandDepth(), payload.mountainWidth(), payload.mountainDepth());
+        if (!freshConnection && payload.seed() == HydrologyManager.worldSeed()
+                && payload.seaLevel() == HydrologyManager.getSeaLevel() && scale.equals(HydrologyManager.riverScale())) {
+            return;
+        }
+        freshConnection = false;
         HydrologyManager.clearCaches();
+        com.AdamNew.dynamicwaters.MainRivers.clearCaches();
         HydrologyManager.setSeed(payload.seed());
         HydrologyManager.setSeaLevel(payload.seaLevel());
+        HydrologyManager.setRiverScale(scale);
     }
 
     public static void receive(SyncWatershedsPacket payload, boolean ownServer) {
@@ -45,6 +60,10 @@ public class ModNetwork {
         registrar.playToClient(SyncFlowZonesPacket.TYPE, SyncFlowZonesPacket.STREAM_CODEC,
             (payload, context) -> context.enqueueWork(() ->
                     com.AdamNew.dynamicwaters.client.FlowZoneClient.receive(payload)));
+
+        registrar.playToClient(SyncLivingCurrentPacket.TYPE, SyncLivingCurrentPacket.STREAM_CODEC,
+            (payload, context) -> context.enqueueWork(() ->
+                    com.AdamNew.dynamicwaters.client.LivingCurrentClient.receive(payload)));
     }
     //?} forge {
     /*public static final net.minecraftforge.network.simple.SimpleChannel CHANNEL = net.minecraftforge.network.NetworkRegistry.newSimpleChannel(
@@ -71,6 +90,8 @@ public class ModNetwork {
         toClient(3, SyncMainRiversPacket.class, SyncMainRiversPacket::new, (payload, context) -> receive(payload, ownServer(context)));
         toClient(4, SyncFlowZonesPacket.class, SyncFlowZonesPacket::new, (payload, context) ->
                 com.AdamNew.dynamicwaters.client.FlowZoneClient.receive(payload));
+        toClient(5, SyncLivingCurrentPacket.class, SyncLivingCurrentPacket::new, (payload, context) ->
+                com.AdamNew.dynamicwaters.client.LivingCurrentClient.receive(payload));
     }
     *///?}
 }

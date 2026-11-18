@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:moonlight_grove", "terralith:moonlight_valley"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:calcite*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:clay*3", "minecraft:sand*2"],
+  "shore": ["keep*5", "minecraft:calcite", "minecraft:moss_block"],
+  "bars": ["minecraft:sand*3", "minecraft:clay"],
+  "flats": ["keep*3", "minecraft:calcite"],
+  "patch_size": 5,
+  "shore_height": 1
+}

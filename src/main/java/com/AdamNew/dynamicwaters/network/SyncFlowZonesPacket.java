@@ -36,7 +36,7 @@ public record SyncFlowZonesPacket(List<FlowZones.Zone> zones) implements Payload
             zones.add(new FlowZones.Zone(buffer.readVarInt(),
                     buffer.readInt(), buffer.readInt(), buffer.readInt(),
                     buffer.readInt(), buffer.readInt(), buffer.readInt(),
-                    FlowZones.direction(buffer.readByte())));
+                    FlowZones.direction(buffer.readByte()), FlowZones.speed(buffer.readFloat())));
         }
         return zones;
     }
@@ -52,6 +52,7 @@ public record SyncFlowZonesPacket(List<FlowZones.Zone> zones) implements Payload
             buffer.writeInt(zone.maxY());
             buffer.writeInt(zone.maxZ());
             buffer.writeByte(zone.direction());
+            buffer.writeFloat((float) zone.speed());
         }
     }
 

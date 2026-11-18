@@ -15,4 +15,18 @@ public class ModParticles {
             //?} else {
             /*PARTICLE_TYPES.register("river_bubble", net.fabricmc.fabric.api.particle.v1.FabricParticleTypes::simple);
             *///?}
+
+    public static final Supplier<SimpleParticleType> RIVER_FOAM =
+            //? !fabric {
+            PARTICLE_TYPES.register("river_foam", () -> new SimpleParticleType(false));
+            //?} else {
+            /*PARTICLE_TYPES.register("river_foam", net.fabricmc.fabric.api.particle.v1.FabricParticleTypes::simple);
+            *///?}
+
+    public static final Supplier<SimpleParticleType> RIVER_MIST =
+            //? !fabric {
+            PARTICLE_TYPES.register("river_mist", () -> new SimpleParticleType(false));
+            //?} else {
+            /*PARTICLE_TYPES.register("river_mist", net.fabricmc.fabric.api.particle.v1.FabricParticleTypes::simple);
+            *///?}
 }

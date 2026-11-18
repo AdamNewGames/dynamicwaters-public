@@ -24,7 +24,13 @@ import java.util.stream.Stream;
 public final class WaterPlantSets {
     private static final Logger LOG = LogUtils.getLogger();
 
-    private static final String[] BUILT_IN = { "default.json", "warm_waters.json" };
+    private static final String[] BUILT_IN = { "default.json",
+
+            "regions_unexplored_fen.json", "regions_unexplored_bayou.json",
+            "biomeswevegone_swamps.json", "biomeswevegone_glowing_wetlands.json",
+            "terralith_swamps.json", "terralith_oasis.json",
+            "natures_spirit_marsh.json", "natures_spirit_tropics.json", "natures_spirit_blossom_waters.json",
+            "warm_waters.json" };
     private static final String RESOURCE_DIR = "/dynamicwaters/water_plants/";
 
     private static volatile List<WaterPlantSet> builtIn;
@@ -43,7 +49,7 @@ public final class WaterPlantSets {
     }
 
     public static List<String> builtInFileNames() {
-        return List.of(BUILT_IN);
+        return BiomeMatch.forInstalledMods(BUILT_IN, WaterPlantSets::resource);
     }
 
     public static String builtInText(String fileName) {
@@ -160,6 +166,8 @@ public final class WaterPlantSets {
             LOG.warn("Dynamic Waters: water plants {} are not a JSON object: {}", source, e.getMessage());
             return null;
         }
+
+        if (BiomeMatch.modMissing(o)) return null;
         final List<List<WaterPlant>> plants = new ArrayList<>();
         for (String kind : WaterPlantSet.KINDS) {
             final List<WaterPlant> list = new ArrayList<>();
@@ -226,7 +234,8 @@ public final class WaterPlantSets {
 
             Kelp grows in a stalk from the bed up toward the surface; tall seagrass takes two blocks
             of water; sea pickles come one to four to a block. A block that can hold water is laid
-            holding it, under the water. Nothing grows on the surface or the shore where it snows:
+            holding it, under the water. A two-block plant that can hold water - cattails - stands
+            in one block of water with its top in the air (`"depth": [1, 1]`), or on the bank whole. Nothing grows on the surface or the shore where it snows:
             the water freezes over there.
 
             ## Which set a biome gets
@@ -240,6 +249,7 @@ public final class WaterPlantSets {
             | `where.climate` | `{"temperature": [1.0, 2.5], "downfall": [0.0, 0.3]}` | ...or in a biome whose climate falls in this window. |
             | `where.not` | `["minecraft:stony_peaks", "#c:is_snowy"]` | Never in these biomes, nor in a biome with these `#tags`. |
             | `enabled` | `false` | Nothing grows wherever this set applies. |
+            | `mod` | `"biomeswevegone"` | Only with this mod installed - for its biomes, with its plants. |
 
             1. A set that names the biome in `where.biomes`.
             2. Otherwise the first one with one of the biome's tags in `where.tags`.

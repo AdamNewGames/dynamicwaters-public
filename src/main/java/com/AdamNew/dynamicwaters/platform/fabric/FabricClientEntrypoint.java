@@ -35,16 +35,20 @@ public class FabricClientEntrypoint implements ClientModInitializer {
 		ClientSetup.clientSetup();
 		EntityRendererRegistry.register(ModEntities.ICE_FLOE.get(), IceFloeRenderer::new);
 		ParticleFactoryRegistry.getInstance().register(ModParticles.RIVER_BUBBLE.get(), RiverBubbleParticle.Provider::new);
-
+		ParticleFactoryRegistry.getInstance().register(ModParticles.RIVER_FOAM.get(), com.AdamNew.dynamicwaters.client.particle.RiverFoamParticle.Provider::new);
+		ParticleFactoryRegistry.getInstance().register(ModParticles.RIVER_MIST.get(), com.AdamNew.dynamicwaters.client.particle.RiverMistParticle.Provider::new);
 		ClientPlayNetworking.registerGlobalReceiver(SyncSeedPacket.TYPE, (payload, context) -> ModNetwork.receive(payload, ownServer(context)));
 		ClientPlayNetworking.registerGlobalReceiver(SyncWatershedsPacket.TYPE, (payload, context) -> ModNetwork.receive(payload, ownServer(context)));
 		ClientPlayNetworking.registerGlobalReceiver(SyncMainRiversPacket.TYPE, (payload, context) -> ModNetwork.receive(payload, ownServer(context)));
 		ClientPlayNetworking.registerGlobalReceiver(SyncVanillaFlowPacket.TYPE, (payload, context) -> VanillaFlowClientEvents.receive(payload));
 		ClientPlayNetworking.registerGlobalReceiver(SyncFlowZonesPacket.TYPE, (payload, context) -> FlowZoneClient.receive(payload));
+		ClientPlayNetworking.registerGlobalReceiver(com.AdamNew.dynamicwaters.network.SyncLivingCurrentPacket.TYPE,
+				(payload, context) -> com.AdamNew.dynamicwaters.client.LivingCurrentClient.receive(payload));
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			VanillaFlowClientEvents.onLoggingOut();
 			FlowZoneClient.onLoggingOut();
+			com.AdamNew.dynamicwaters.network.ModNetwork.onClientLoggingOut();
 		});
 		WorldRenderEvents.LAST.register(context -> FlowZoneClient.render(new PoseStack().last(), context.camera().getPosition()));
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) ->

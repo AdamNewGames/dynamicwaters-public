@@ -1,7 +1,10 @@
 # Dynamic Waters
 
-A mod for NeoForge and Fabric on Minecraft 1.21.1 and Forge on 1.20.1 that reworks water in world generation: mountain
-rivers routed over the real terrain, lowland rivers with deltas, mountain lakes, riverbanks and river currents.
+A mod that adds realistic river hydrology to Minecraft.
+
+Dynamic Waters reworks water in world generation: mountain rivers routed over the real terrain, lowland rivers with
+deltas, mountain lakes, riverbanks and river currents, with foam and mist on the water. It runs on NeoForge and Fabric
+for Minecraft 1.21.1 and on Forge for 1.20.1.
 
 ## Building
 
@@ -34,3 +37,9 @@ Dynamic Waters is licensed under the [Mozilla Public License 2.0](LICENSE).
 Some files are adapted from [TerraFirmaCraft](https://github.com/TerraFirmaCraft/TerraFirmaCraft) (EUPL v1.2) and
 from [Dynamic Waters Async Rivers](https://github.com/erutobusiness/dynamicwaters-asyncrivers) (MIT). They keep
 those licences. The list is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Foam and mist
+
+The foam and mist on rivers and waterfalls were inspired by the water effects of
+[Dynamic Surroundings](https://github.com/OreCruncher/DynamicSurroundingsFabric). Their textures are my own, made
+for Dynamic Waters with some help, and nothing in them is taken from Dynamic Surroundings.

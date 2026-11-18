@@ -1,0 +1,27 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:fen", "regions_unexplored:marsh", "regions_unexplored:muddy_river"]
+  },
+  "lowland": [
+    { "block": "regions_unexplored:duckweed", "at": "surface", "calm": true, "depth": [1, 6], "patch_size": 9, "patch_share": 0.35, "chance": 0.55, "salt": 51101 },
+    { "block": "regions_unexplored:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.3, "chance": 0.55, "salt": 51103 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "chance": 0.003, "alone": true, "salt": 31249 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.3, "chance": 0.5, "salt": 51105 }
+  ],
+  "mountain": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.05 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.12 },
+    { "block": "regions_unexplored:duckweed", "at": "surface", "calm": true, "depth": [1, 6], "patch_size": 9, "patch_share": 0.3, "chance": 0.5, "salt": 51101 },
+    { "block": "regions_unexplored:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.25, "chance": 0.5, "salt": 51103 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.25, "chance": 0.5, "salt": 51105 }
+  ],
+  "lake": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.05 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.12 },
+    { "block": "regions_unexplored:duckweed", "at": "surface", "calm": true, "depth": [1, 8], "patch_size": 11, "patch_share": 0.4, "chance": 0.6, "salt": 51101 },
+    { "block": "regions_unexplored:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.35, "chance": 0.6, "salt": 51103 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "chance": 0.003, "alone": true, "salt": 31249 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 6, "patch_share": 0.35, "chance": 0.55, "salt": 51105 }
+  ]
+}

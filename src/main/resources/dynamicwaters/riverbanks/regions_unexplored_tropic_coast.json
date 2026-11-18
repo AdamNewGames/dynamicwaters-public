@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:tropics", "regions_unexplored:rocky_reef", "regions_unexplored:tropical_river"]
+  },
+  "rapids": ["minecraft:sand*2", "minecraft:gravel*2", "regions_unexplored:mossy_stone"],
+  "silt": ["minecraft:sand*4", "minecraft:clay"],
+  "shore": ["keep*2", "minecraft:sand*3"],
+  "bars": ["minecraft:sand*4"],
+  "flats": ["keep*2", "minecraft:sand*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

@@ -82,6 +82,10 @@ public class IceFloe extends Entity {
         if (!level.isClientSide()) setSize(randomSize(level.getRandom()));
     }
 
+    public static boolean cold(Level level, BlockPos pos) {
+        return level.getBiome(pos).value().coldEnoughToSnow(pos) || com.AdamNew.dynamicwaters.SeasonsCompat.iceSeasonAt(level, pos);
+    }
+
     public static float randomSize(RandomSource random) {
         final float r = random.nextFloat();
         return SMALLEST + (LARGEST - SMALLEST) * r * r;
@@ -162,7 +166,7 @@ public class IceFloe extends Entity {
         move(MoverType.SELF, v);
         if (level.isClientSide()) return;
         if ((tickCount + getId()) % CLIMATE_EVERY == 0) {
-            warm = !level.getBiome(blockPosition()).value().coldEnoughToSnow(blockPosition());
+            warm = !cold(level, blockPosition());
         }
 
         age += warm ? 10 : 1;

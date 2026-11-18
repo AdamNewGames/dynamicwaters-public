@@ -30,6 +30,9 @@ public class NoiseChunkGeneratorMixin {
     private static final int[] DYNAMICWATERS$SIDE_Z = {0, 0, 1, -1};
 
     @org.spongepowered.asm.mixin.Unique
+    private static final int DYNAMICWATERS$HOLD_UNDER = 12;
+
+    @org.spongepowered.asm.mixin.Unique
     private static void dynamicwaters$containWater(ChunkAccess chunk, int startX, int startZ,
             HydrologyManager.RiverCarving[] carvings, int[] original, boolean[] repaired, java.util.BitSet[] protectedMap,
             int minH) {
@@ -58,11 +61,22 @@ public class NoiseChunkGeneratorMixin {
                     if (nx < 0 || nx > 15 || nz < 0 || nz > 15) continue;
                     final int j = nx + nz * 16;
                     final HydrologyManager.RiverCarving n = carvings[j];
-                    if (HydrologyManager.holdsWater(n) && y > n.waterLevel) continue;
+
+                    if ((HydrologyManager.holdsWater(n) || repaired[j] && n != null) && HydrologyManager.ownWater(n)
+                            && y > n.waterLevel) continue;
                     final java.util.BitSet p = protectedMap[j];
                     if (p != null && y >= minH && p.get(y - minH)) continue;
                     at.set(startX + nx, y, startZ + nz);
-                    if (chunk.getBlockState(at).isAir()) chunk.setBlockState(at, HydrologyManager.holdFill(chunk, at), false);
+                    if (!chunk.getBlockState(at).isAir()) continue;
+                    final BlockState fill = HydrologyManager.holdFill(chunk, at);
+                    chunk.setBlockState(at.set(startX + nx, y, startZ + nz), fill, false);
+
+                    for (int k = 1; k <= DYNAMICWATERS$HOLD_UNDER; k++) {
+                        final int ky = y - k;
+                        if (p != null && ky >= minH && p.get(ky - minH)) break;
+                        if (!chunk.getBlockState(at.set(startX + nx, ky, startZ + nz)).isAir()) break;
+                        chunk.setBlockState(at, fill, false);
+                    }
                 }
             }
         }
@@ -276,6 +290,8 @@ public class NoiseChunkGeneratorMixin {
                     protectedBlocksMap[i], minH);
         }
 
+        final int[] ownWater = new int[256];
+        java.util.Arrays.fill(ownWater, Integer.MIN_VALUE);
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 double worldX = startX + x;
@@ -445,6 +461,7 @@ public class NoiseChunkGeneratorMixin {
                     }
 
                     if (targetY <= carving.waterLevel && !carving.isWatershedWall) {
+                        ownWater[x + z * 16] = carving.waterLevel;
                         for (int y = carving.waterLevel; y >= targetY + 1; y--) {
                             if (y >= minH && protectedBlocks.get(y - minH)) continue;
 
@@ -500,7 +517,11 @@ public class NoiseChunkGeneratorMixin {
                 }
             }
         }
+        HydrologyManager.lowerPonds(chunk, startX, startZ, ownWater, protectedBlocksMap, minH,
+                (net.minecraft.world.level.chunk.ChunkGenerator) (Object) this, random);
         com.AdamNew.dynamicwaters.LakeHollows.clearChunkGround();
+
+        com.AdamNew.dynamicwaters.OpenedGroundBiomes.repaint(chunk, preCarve, random.sampler());
     }
 
     @Inject(method = "applyCarvers", at = @At("HEAD"))
@@ -579,6 +600,8 @@ public class NoiseChunkGeneratorMixin {
                     }
 
                     HydrologyManager.RiverCarving carving = HydrologyManager.calculateRiverCarving(worldX, worldZ, originalY, seaLevel, ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this), chunk, randomState);
+                    HydrologyManager.labCarveDump(startX + x, startZ + z, originalY, carving,
+                            ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this), chunk, randomState);
                     int targetY = carving.modifies ? carving.targetY : originalY;
                     int cavernRoofY = carving.cavernRoofY;
                     int carveTopY = Math.min(originalY, cavernRoofY);
@@ -738,6 +761,12 @@ public class NoiseChunkGeneratorMixin {
             com.AdamNew.dynamicwaters.LakeHollows.clearChunkGround();
             com.AdamNew.dynamicwaters.shore.ShoreSkin.apply(chunk, skinCarvings, skinOriginal, repairedWater, protectedBlocksMap2, minH, startX, startZ,
                     ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this).getBiomeSource(), randomState.sampler());
+
+            com.AdamNew.dynamicwaters.shore.RiverBeach.dress(chunk, skinCarvings, protectedBlocksMap2, minH, startX, startZ,
+                    ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this).getBiomeSource(), randomState.sampler());
+
+            com.AdamNew.dynamicwaters.shore.Boulders.fordRocks(chunk, skinCarvings, protectedBlocksMap2, minH, startX, startZ,
+                    ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this).getBiomeSource(), randomState);
 
             com.AdamNew.dynamicwaters.shore.WaterPlants.plant(chunk, skinCarvings, skinOriginal, protectedBlocksMap2, minH, startX, startZ,
                     ((net.minecraft.world.level.chunk.ChunkGenerator)(Object)this).getBiomeSource(), randomState.sampler());

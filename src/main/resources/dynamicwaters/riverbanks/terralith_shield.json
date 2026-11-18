@@ -1,0 +1,14 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:shield", "terralith:shield_clearing", "terralith:snowy_shield", "terralith:lush_valley",
+      "terralith:valley_clearing"]
+  },
+  "rapids": ["minecraft:cobblestone*2", "minecraft:mossy_cobblestone*2", "minecraft:gravel*3", "minecraft:granite"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:podzol*2", "minecraft:mossy_cobblestone", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:podzol", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

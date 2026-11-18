@@ -14,7 +14,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SeaPickleBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.chunk.ChunkAccess;
 
 import java.util.Arrays;
@@ -97,7 +96,7 @@ public final class WaterPlants {
                 final int y = (p.calm ? calmSurface : anySurface)[i];
                 if (y == Integer.MIN_VALUE || !inDepth(p, depth[i]) || !drawn(p, wx, wz)) continue;
                 if (frozen(chunk, pos.set(wx, y + 1, wz)) || isProtected(protectedMap[i], y + 1, minH)) continue;
-                chunk.setBlockState(pos.set(wx, y + 1, wz), dry(p.state), false);
+                chunk.setBlockState(pos.set(wx, y + 1, wz), dry(varied(p, wx, wz)), false);
                 WatershedStats.waterPlants.increment();
                 break;
             }
@@ -154,15 +153,28 @@ public final class WaterPlants {
                 chunk.setBlockState(pos.set(wx, ky, wz), k == height ? tip : stalk, false);
                 placed++;
             }
-        } else if (p.isDouble()) {
-            if (depth < 2 || isProtected(bits, bed + 1, minH) || isProtected(bits, bed + 2, minH)) return false;
-            final BlockState lower = wet(p.state.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.LOWER));
-            final BlockState upper = wet(p.state.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.UPPER));
-            chunk.setBlockState(pos.set(wx, bed + 1, wz), lower, false);
-            chunk.setBlockState(pos.set(wx, bed + 2, wz), upper, false);
-            placed = 2;
+        } else if (p.isTall()) {
+            final BlockState[] parts = p.parts;
+            for (int k = 0; k < parts.length; k++) {
+                if (isProtected(bits, bed + 1 + k, minH)) return false;
+            }
+            if (depth >= parts.length) {
+                for (int k = 0; k < parts.length; k++) chunk.setBlockState(pos.set(wx, bed + 1 + k, wz), wet(parts[k]), false);
+            } else {
+                for (int k = 0; k < depth; k++) {
+                    if (!parts[k].hasProperty(BlockStateProperties.WATERLOGGED)) return false;
+                }
+                for (int k = depth; k < parts.length; k++) {
+                    if (!chunk.getBlockState(pos.set(wx, bed + 1 + k, wz)).isAir()) return false;
+                }
+                if (frozen(chunk, pos.set(wx, bed + 1 + depth, wz))) return false;
+                for (int k = 0; k < parts.length; k++) {
+                    chunk.setBlockState(pos.set(wx, bed + 1 + k, wz), k < depth ? wet(parts[k]) : dry(parts[k]), false);
+                }
+            }
+            placed = parts.length;
         } else {
-            BlockState s = wet(p.state);
+            BlockState s = wet(varied(p, wx, wz));
             if (p.isPickles()) s = s.setValue(SeaPickleBlock.PICKLES, 1 + (int) (Patches.hash01(wx, p.salt + 3, wz) * 4.0));
 
             final int tall = Math.min(height(p, wx, wz), depth);
@@ -182,7 +194,16 @@ public final class WaterPlants {
         final BlockState ground = chunk.getBlockState(pos.set(wx, level, wz));
         if (!ground.is(BlockTags.DIRT) && !ground.is(BlockTags.SAND)) return false;
         if (frozen(chunk, pos.set(wx, level + 1, wz))) return false;
-        final BlockState s = dry(p.state);
+        if (p.isTall()) {
+            final BlockState[] parts = p.parts;
+            for (int k = 1; k <= parts.length; k++) {
+                if (!chunk.getBlockState(pos.set(wx, level + k, wz)).isAir() || isProtected(bits, level + k, minH)) return false;
+            }
+            for (int k = 0; k < parts.length; k++) chunk.setBlockState(pos.set(wx, level + 1 + k, wz), dry(parts[k]), false);
+            WatershedStats.waterPlants.increment();
+            return true;
+        }
+        final BlockState s = dry(varied(p, wx, wz));
         final int tall = height(p, wx, wz);
         int placed = 0;
         for (int k = 1; k <= tall; k++) {
@@ -218,14 +239,14 @@ public final class WaterPlants {
     }
 
     static int kindOf(HydrologyManager.RiverCarving c) {
-        if (c.isLake) return WaterPlantSet.LAKE;
+        if (c.isLake || c.oxbow) return WaterPlantSet.LAKE;
         if (c.isMountainRiver || c.isWatershed) return WaterPlantSet.MOUNTAIN;
         if (c.isMainRiverWater) return WaterPlantSet.LOWLAND;
         return -1;
     }
 
     private static boolean calm(HydrologyManager.RiverCarving c) {
-        if (c.isLake) return true;
+        if (c.isLake || c.oxbow) return true;
         if (c.isMountainRiver) {
             return c.channelSlope <= CALM_SLOPE && c.channelWidth > 0.0 && c.distanceFromCenter >= MOUNTAIN_CALM * c.channelWidth;
         }
@@ -264,6 +285,18 @@ public final class WaterPlants {
             }
         }
         return false;
+    }
+
+    private static BlockState varied(WaterPlant p, int x, int z) {
+        BlockState s = p.state;
+        if (s.hasProperty(BlockStateProperties.HORIZONTAL_FACING) && !p.id.contains("facing=")) {
+            s = s.setValue(BlockStateProperties.HORIZONTAL_FACING,
+                    Direction.from2DDataValue((int) (Patches.hash01(x, p.salt + 5, z) * 4.0)));
+        }
+        if (s.hasProperty(BlockStateProperties.FLOWER_AMOUNT) && !p.id.contains("flower_amount=")) {
+            s = s.setValue(BlockStateProperties.FLOWER_AMOUNT, 1 + (int) (Patches.hash01(z, p.salt + 6, x) * 4.0));
+        }
+        return s;
     }
 
     private static BlockState wet(BlockState s) {

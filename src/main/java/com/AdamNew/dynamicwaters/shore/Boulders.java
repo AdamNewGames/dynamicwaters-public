@@ -72,7 +72,7 @@ public final class Boulders {
             final int y = c.waterLevel;
             if (!water(chunk.getBlockState(pos.set(wx, y, wz))) || !chunk.getBlockState(pos.set(wx, y + 1, wz)).isAir()) continue;
             surface[i] = y;
-            if (c.isLake) continue;
+            if (c.isLake || c.oxbow) continue;
             if (c.isMainRiverWater) {
                 lowland[i] = !c.deltaWater;
             } else if (c.isMountainRiver && c.channelWidth >= MIN_HALF_WIDTH && c.distanceFromCenter <= c.channelWidth - 1.0) {
@@ -100,6 +100,33 @@ public final class Boulders {
             for (int ky = bed + 1; ky <= top; ky++) {
                 if (bits != null && ky >= minH && bits.get(ky - minH)) break;
                 chunk.setBlockState(pos.set(wx, ky, wz), stone(wx, ky, wz, palette, ky == top, bands), false);
+            }
+        }
+    }
+
+    public static void fordRocks(ChunkAccess chunk, HydrologyManager.RiverCarving[] carvings, BitSet[] protectedMap,
+            int minH, int startX, int startZ, BiomeSource biomeSource, RandomState randomState) {
+        final Climate.Sampler sampler = randomState.sampler();
+        final SurfaceSystemAccessor bands = (SurfaceSystemAccessor) randomState.surfaceSystem();
+        final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        final Map<Long, Holder<Biome>> lands = new HashMap<>();
+        for (int i = 0; i < 256; i++) {
+            final HydrologyManager.RiverCarving c = carvings[i];
+            if (c == null || c.fordRock == Integer.MIN_VALUE) continue;
+            final int wx = startX + (i & 15), wz = startZ + (i >> 4);
+            if (!water(chunk.getBlockState(pos.set(wx, c.waterLevel, wz)))) continue;
+            int bed = c.waterLevel;
+            while (bed > minH && water(chunk.getBlockState(pos.set(wx, bed, wz)))) bed--;
+            if (c.fordRock <= bed) continue;
+            pos.set(wx, c.waterLevel, wz);
+            final Holder<Biome> here = chunk.getNoiseBiome(wx >> 2, c.waterLevel >> 2, wz >> 2);
+            final Palette palette = palette(ShoreSkin.landBiome(here, wx >> 2, c.waterLevel >> 2, wz >> 2,
+                    biomeSource, sampler, lands), pos);
+            final BitSet bits = protectedMap[i];
+            for (int ky = bed + 1; ky <= c.fordRock; ky++) {
+                if (bits != null && ky >= minH && bits.get(ky - minH)) break;
+                if (ky > c.waterLevel && !chunk.getBlockState(pos.set(wx, ky, wz)).isAir()) break;
+                chunk.setBlockState(pos.set(wx, ky, wz), stone(wx, ky, wz, palette, ky == c.fordRock, bands), false);
             }
         }
     }

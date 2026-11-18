@@ -34,6 +34,14 @@ public class ChunkGeneratorMixin {
     private void dynamicwaters$riverLogs(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager,
             CallbackInfo ci) {
         if (RiverLogs.wanted(level)) RiverLogs.lay(level, chunk);
+        com.AdamNew.dynamicwaters.RiverFords.decorated(level, chunk);
+    }
+
+    @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
+    private void dynamicwaters$waterfallCaves(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager,
+            CallbackInfo ci) {
+        com.AdamNew.dynamicwaters.WaterfallCaves.carve(level, chunk);
+        com.AdamNew.dynamicwaters.RiverArches.place(level, chunk);
     }
 
     @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))

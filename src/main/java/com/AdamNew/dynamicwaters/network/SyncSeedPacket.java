@@ -7,7 +7,8 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 //?}
 
-public record SyncSeedPacket(long seed, int seaLevel) implements Payload {
+public record SyncSeedPacket(long seed, int seaLevel, double lowlandWidth, double lowlandDepth, double mountainWidth,
+        double mountainDepth) implements Payload {
     //? if >=1.20.5 {
     public static final Type<SyncSeedPacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("dynamicwaters", "sync_seed"));
 
@@ -18,12 +19,17 @@ public record SyncSeedPacket(long seed, int seaLevel) implements Payload {
     //?}
 
     public SyncSeedPacket(FriendlyByteBuf buffer) {
-        this(buffer.readLong(), buffer.readInt());
+        this(buffer.readLong(), buffer.readInt(), buffer.readDouble(), buffer.readDouble(), buffer.readDouble(),
+                buffer.readDouble());
     }
 
     public void write(FriendlyByteBuf buffer) {
         buffer.writeLong(this.seed);
         buffer.writeInt(this.seaLevel);
+        buffer.writeDouble(this.lowlandWidth);
+        buffer.writeDouble(this.lowlandDepth);
+        buffer.writeDouble(this.mountainWidth);
+        buffer.writeDouble(this.mountainDepth);
     }
 
     //? if >=1.20.5 {

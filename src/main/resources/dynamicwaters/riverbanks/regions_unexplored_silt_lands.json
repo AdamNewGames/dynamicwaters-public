@@ -1,0 +1,15 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:barley_fields", "regions_unexplored:prairie", "regions_unexplored:orchard",
+      "regions_unexplored:pumpkin_fields", "regions_unexplored:autumnal_maple_forest",
+      "regions_unexplored:silver_birch_forest", "regions_unexplored:muddy_river"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:cobblestone*2", "regions_unexplored:silt_coarse_dirt"],
+  "silt": ["regions_unexplored:silt_mud*4", "minecraft:clay*2", "minecraft:sand"],
+  "shore": ["keep*4", "regions_unexplored:silt_dirt*2", "regions_unexplored:silt_coarse_dirt", "minecraft:gravel"],
+  "bars": ["minecraft:sand*2", "regions_unexplored:silt_mud*2", "minecraft:gravel"],
+  "flats": ["keep*3", "regions_unexplored:silt_mud"],
+  "patch_size": 5,
+  "shore_height": 1
+}

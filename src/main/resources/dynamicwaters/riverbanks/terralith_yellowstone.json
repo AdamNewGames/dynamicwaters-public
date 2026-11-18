@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:yellowstone"]
+  },
+  "rapids": ["minecraft:calcite*2", "minecraft:gravel*2", "minecraft:yellow_terracotta"],
+  "silt": ["minecraft:calcite*2", "minecraft:clay*2", "minecraft:sand"],
+  "shore": ["keep*3", "minecraft:calcite*2", "minecraft:yellow_terracotta", "minecraft:orange_terracotta"],
+  "bars": ["minecraft:gravel*2", "minecraft:calcite"],
+  "flats": ["keep*3", "minecraft:calcite", "minecraft:yellow_terracotta"],
+  "patch_size": 4,
+  "shore_height": 1
+}

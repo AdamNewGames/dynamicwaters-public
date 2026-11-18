@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:xeric_plains", "natures_spirit:xeric_river", "natures_spirit:shrubland", "natures_spirit:flowering_shrubland", "natures_spirit:cedar_thicket"]
+  },
+  "rapids": ["natures_spirit:cobbled_travertine*2", "natures_spirit:travertine*2", "natures_spirit:mossy_cobbled_travertine", "minecraft:gravel*2"],
+  "silt": ["minecraft:sand*2", "minecraft:clay*2", "minecraft:gravel"],
+  "shore": ["keep*4", "natures_spirit:sandy_soil*2", "natures_spirit:travertine"],
+  "bars": ["minecraft:gravel*2", "minecraft:sand*2"],
+  "flats": ["keep*3", "natures_spirit:sandy_soil"],
+  "patch_size": 5,
+  "shore_height": 1
+}

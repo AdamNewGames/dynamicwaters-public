@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:rainbow_beach"]
+  },
+  "rapids": ["biomeswevegone:white_sand*2", "biomeswevegone:pink_sand", "minecraft:gravel"],
+  "silt": ["biomeswevegone:pink_sand*2", "biomeswevegone:purple_sand*2", "biomeswevegone:blue_sand*2",
+    "biomeswevegone:white_sand"],
+  "shore": ["keep*3", "biomeswevegone:pink_sand", "biomeswevegone:purple_sand", "biomeswevegone:blue_sand"],
+  "bars": ["biomeswevegone:pink_sand*2", "biomeswevegone:purple_sand", "biomeswevegone:blue_sand"],
+  "flats": ["keep*3", "biomeswevegone:white_sand"],
+  "patch_size": 4,
+  "shore_height": 1
+}

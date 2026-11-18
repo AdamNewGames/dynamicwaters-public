@@ -37,7 +37,7 @@ public final class FlowZonesCommand {
             final String teleport = "/tp @s " + (zone.minX() + zone.maxX()) / 2 + " " + (zone.maxY() + 1) + " "
                     + (zone.minZ() + zone.maxZ()) / 2;
             final Component line = Component.translatable("commands.dynamicwaters.flowzones.entry", zone.id(),
-                            zone.minX(), zone.minZ(), zone.maxX(), zone.maxZ(), FlowZones.describe(zone.direction()))
+                            zone.minX(), zone.minZ(), zone.maxX(), zone.maxZ(), FlowZones.describe(zone.direction(), zone.speed()))
                     .withStyle(style -> style
                             .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, teleport))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,

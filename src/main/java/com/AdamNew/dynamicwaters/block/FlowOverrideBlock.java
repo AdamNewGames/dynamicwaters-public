@@ -21,16 +21,35 @@ public class FlowOverrideBlock extends AirBlock {
 
     public static final BooleanProperty FLOW_ENABLED = BooleanProperty.create("flow_enabled");
 
+    public static final IntegerProperty FLOW_SPEED = IntegerProperty.create("flow_speed", 0, 7);
+
+    public static final double[] SPEEDS = {0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0};
+
+    public static final int DEFAULT_SPEED = 3;
+
     public FlowOverrideBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any()
                 .setValue(FLOW_DIRECTION, 0)
-                .setValue(FLOW_ENABLED, true));
+                .setValue(FLOW_ENABLED, true)
+                .setValue(FLOW_SPEED, DEFAULT_SPEED));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FLOW_DIRECTION, FLOW_ENABLED);
+        builder.add(FLOW_DIRECTION, FLOW_ENABLED, FLOW_SPEED);
+    }
+
+    public static double pace(int step) {
+        return SPEEDS[step >= 0 && step < SPEEDS.length ? step : DEFAULT_SPEED];
+    }
+
+    public static Vec3 flowOf(BlockState override) {
+        return directionToVec3(override.getValue(FLOW_DIRECTION)).scale(pace(override.getValue(FLOW_SPEED)));
+    }
+
+    public static String speedText(double speed) {
+        return java.math.BigDecimal.valueOf(speed).stripTrailingZeros().toPlainString();
     }
 
     @Override

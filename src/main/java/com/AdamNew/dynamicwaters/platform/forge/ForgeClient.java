@@ -47,6 +47,8 @@ public final class ForgeClient {
         @SubscribeEvent
         public static void registerParticleProviders(RegisterParticleProvidersEvent event) {
             event.registerSpriteSet(ModParticles.RIVER_BUBBLE.get(), RiverBubbleParticle.Provider::new);
+            event.registerSpriteSet(ModParticles.RIVER_FOAM.get(), com.AdamNew.dynamicwaters.client.particle.RiverFoamParticle.Provider::new);
+            event.registerSpriteSet(ModParticles.RIVER_MIST.get(), com.AdamNew.dynamicwaters.client.particle.RiverMistParticle.Provider::new);
         }
     }
 
@@ -59,6 +61,7 @@ public final class ForgeClient {
         public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
             VanillaFlowClientEvents.onLoggingOut();
             FlowZoneClient.onLoggingOut();
+            com.AdamNew.dynamicwaters.network.ModNetwork.onClientLoggingOut();
         }
 
         @SubscribeEvent

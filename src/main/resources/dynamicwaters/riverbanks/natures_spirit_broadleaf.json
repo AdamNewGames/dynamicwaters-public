@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:aspen_forest", "natures_spirit:maple_woodlands", "natures_spirit:golden_wilds", "natures_spirit:autumnal_river", "natures_spirit:birch_river"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone", "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:clay*2", "minecraft:gravel*2", "minecraft:sand"],
+  "shore": ["keep*4", "minecraft:coarse_dirt", "minecraft:rooted_dirt", "minecraft:podzol"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:coarse_dirt", "minecraft:rooted_dirt"],
+  "patch_size": 5,
+  "shore_height": 1
+}

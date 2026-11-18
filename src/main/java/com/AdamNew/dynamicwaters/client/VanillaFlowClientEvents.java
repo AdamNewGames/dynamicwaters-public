@@ -22,5 +22,7 @@ public final class VanillaFlowClientEvents {
 
     public static void onLoggingOut() {
         VanillaRiverFlow.clearClient();
+
+        com.AdamNew.dynamicwaters.LivingCurrent.clearClient();
     }
 }

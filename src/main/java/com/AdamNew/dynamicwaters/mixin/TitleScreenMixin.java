@@ -21,6 +21,7 @@ public class TitleScreenMixin {
     //? if >=1.20.5 {
     @Inject(method = {"renderPanorama", "m_280039_"}, at = @At("HEAD"), cancellable = true)
     private void onRenderPanorama(net.minecraft.client.gui.GuiGraphics graphics, float partialTick, CallbackInfo ci) {
+        com.AdamNew.dynamicwaters.client.gui.DWConfigScreen.labOpen((TitleScreen) (Object) this);
         if (Config.CUSTOM_MAIN_MENU_PANORAMA != null && Config.CUSTOM_MAIN_MENU_PANORAMA.get()) {
             if (DYNAMIC_WATERS_PANORAMA == null) {
                 CubeMap customCubeMap = new CubeMap(ResourceLocation.fromNamespaceAndPath(DynamicWaters.MODID, "textures/gui/title/background/panorama"));

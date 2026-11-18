@@ -16,15 +16,15 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public final class MountainRiverBiome {
-    private static final int REACH = 8;
+    private static final int REACH = 8, LAKE_UNDER = 24;
     private static final int NO_WATER = Integer.MIN_VALUE;
 
     private MountainRiverBiome() {
     }
 
     public static boolean wanted(WorldGenLevel level) {
-        return Config.MOUNTAIN_RIVER_BIOME.get() && Config.ENABLE_watersheds.get() && Config.dynamicNormalRivers()
-                && HydrologyManager.riversIn(level.getLevel());
+        return (Config.MOUNTAIN_RIVER_BIOME.get() || Config.LAKE_BIOME.get()) && Config.ENABLE_watersheds.get()
+                && Config.dynamicNormalRivers() && HydrologyManager.riversIn(level.getLevel());
     }
 
     public static void paint(WorldGenLevel level, ChunkAccess chunk, Holder<Biome> river, Holder<Biome> frozen) {
@@ -42,9 +42,13 @@ public final class MountainRiverBiome {
             if (y == NO_WATER) continue;
             final Holder<Biome> land = chunk.getNoiseBiome(qx0 + (i & 3), QuartPos.fromBlock(y), qz0 + (i >> 2));
             if (land.is(BiomeTags.IS_RIVER) || land.is(BiomeTags.IS_OCEAN)) continue;
-            if (!HydrologyManager.inMountainRiverMiddle(x + 0.5, y, z + 0.5)) continue;
+
+            final boolean lake = Config.LAKE_BIOME.get() && HydrologyManager.inLakeWater(x + 0.5, y, z + 0.5);
+            if (!lake && !(Config.MOUNTAIN_RIVER_BIOME.get() && HydrologyManager.inMountainRiverMiddle(x + 0.5, y, z + 0.5))) {
+                continue;
+            }
             biome[i] = frozen != null && land.value().coldEnoughToSnow(at.set(x, y, z)) ? frozen : river;
-            from[i] = QuartPos.fromBlock(y - REACH);
+            from[i] = QuartPos.fromBlock(y - (lake ? LAKE_UNDER : REACH));
             to[i] = QuartPos.fromBlock(y + REACH);
             lowest = Math.min(lowest, from[i]);
             highest = Math.max(highest, to[i]);

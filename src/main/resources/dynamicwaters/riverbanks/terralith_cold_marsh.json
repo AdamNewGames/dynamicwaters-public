@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:ice_marsh"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:mud*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:mud*4", "minecraft:clay*2", "minecraft:gravel"],
+  "shore": ["minecraft:mud*3", "keep*3", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*2", "minecraft:mud", "minecraft:clay"],
+  "flats": ["minecraft:mud*3", "keep*3", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

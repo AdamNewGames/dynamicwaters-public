@@ -1,0 +1,14 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:rainforest", "regions_unexplored:sparse_rainforest",
+      "regions_unexplored:eucalyptus_forest", "regions_unexplored:bamboo_forest"]
+  },
+  "rapids": ["minecraft:gravel*2", "minecraft:mossy_cobblestone*2", "regions_unexplored:mossy_stone*2"],
+  "silt": ["minecraft:mud*3", "minecraft:sand*2", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:mud*2", "minecraft:moss_block"],
+  "bars": ["minecraft:sand*3", "minecraft:mud"],
+  "flats": ["keep*3", "minecraft:mud"],
+  "patch_size": 5,
+  "shore_height": 1
+}

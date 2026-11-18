@@ -1,0 +1,25 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:bayou", "regions_unexplored:old_growth_bayou", "regions_unexplored:fungal_fen"]
+  },
+  "lowland": [
+    { "block": "regions_unexplored:flowering_lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "chance": 0.008, "alone": true, "salt": 52101 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "chance": 0.006, "alone": true, "salt": 31249 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 7, "patch_share": 0.2, "chance": 0.45, "salt": 52105 }
+  ],
+  "mountain": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.05 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.12 },
+    { "block": "regions_unexplored:flowering_lily_pad", "at": "surface", "calm": true, "depth": [1, 4], "chance": 0.006, "alone": true, "salt": 52101 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 7, "patch_share": 0.2, "chance": 0.45, "salt": 52105 }
+  ],
+  "lake": [
+    { "block": "minecraft:tall_seagrass", "depth": [3, 64], "chance": 0.06 },
+    { "block": "minecraft:seagrass", "depth": [2, 64], "chance": 0.14 },
+    { "block": "regions_unexplored:flowering_lily_pad", "at": "surface", "calm": true, "depth": [1, 5], "chance": 0.012, "alone": true, "salt": 52101 },
+    { "block": "minecraft:lily_pad", "at": "surface", "calm": true, "depth": [1, 5], "chance": 0.01, "alone": true, "salt": 31249 },
+    { "block": "regions_unexplored:cattail", "at": "bed", "calm": true, "depth": [1, 1], "patch_size": 6, "patch_share": 0.2, "chance": 0.45, "salt": 52103 },
+    { "block": "regions_unexplored:cattail", "at": "shore", "calm": true, "patch_size": 7, "patch_share": 0.25, "chance": 0.5, "salt": 52105 }
+  ]
+}

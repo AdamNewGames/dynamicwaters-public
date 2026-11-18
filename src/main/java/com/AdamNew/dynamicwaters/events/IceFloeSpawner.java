@@ -3,6 +3,7 @@ package com.AdamNew.dynamicwaters.events;
 import com.AdamNew.dynamicwaters.Config;
 import com.AdamNew.dynamicwaters.DynamicWaters;
 import com.AdamNew.dynamicwaters.HydrologyManager;
+import com.AdamNew.dynamicwaters.SeasonsCompat;
 import com.AdamNew.dynamicwaters.entity.IceFloe;
 import com.AdamNew.dynamicwaters.registry.ModEntities;
 import net.minecraft.core.BlockPos;
@@ -38,7 +39,7 @@ public class IceFloeSpawner {
         };
     }
 
-    private static final int[] LAB_WHY = new int[7];
+    private static final int[] LAB_WHY = new int[8];
 
     public static void onLevelTick(ServerLevel level) {
         final Rate rate = rate(Config.RIVER_ICE_FLOES.get());
@@ -50,8 +51,8 @@ public class IceFloeSpawner {
         if (lab != null) {
             final String[] p = lab.split(",");
             spawnNear(level, Double.parseDouble(p[0].trim()), Double.parseDouble(p[1].trim()), rate);
-            com.mojang.logging.LogUtils.getLogger().info("LABFLOE tries: no node {}, unloaded {}, not open water {}, falling {}, warm {}, no river {}, spawned {}",
-                    LAB_WHY[0], LAB_WHY[1], LAB_WHY[2], LAB_WHY[3], LAB_WHY[4], LAB_WHY[5], LAB_WHY[6]);
+            com.mojang.logging.LogUtils.getLogger().info("LABFLOE tries: no node {}, unloaded {}, not open water {}, falling {}, warm {}, no river {}, spawned {} (lowland {})",
+                    LAB_WHY[0], LAB_WHY[1], LAB_WHY[2], LAB_WHY[3], LAB_WHY[4], LAB_WHY[5], LAB_WHY[6], LAB_WHY[7]);
         }
     }
 
@@ -59,13 +60,17 @@ public class IceFloeSpawner {
         final AABB near = new AABB(px - 96.0, level.getMinBuildHeight(), pz - 96.0, px + 96.0, level.getMaxBuildHeight(), pz + 96.0);
         if (level.getEntitiesOfClass(IceFloe.class, near).size() >= rate.maxNear()) return;
         final List<double[]> nodes = HydrologyManager.mountainRiverNodesNear(px, pz, 16.0, 64.0);
+
+        final int mountain = nodes.size();
+        if (SeasonsCompat.iceSeason(level)) nodes.addAll(HydrologyManager.lowlandRiverPointsNear(px, pz, 16.0, 64.0));
         if (nodes.isEmpty()) {
             LAB_WHY[0]++;
             return;
         }
         final RandomSource rnd = level.getRandom();
         for (int t = 0; t < rate.tries(); t++) {
-            final double[] node = nodes.get(rnd.nextInt(nodes.size()));
+            final int pick = rnd.nextInt(nodes.size());
+            final double[] node = nodes.get(pick);
             final int x = Mth.floor(node[0]), z = Mth.floor(node[1]);
             if (!level.hasChunkAt(new BlockPos(x, level.getSeaLevel(), z))) {
                 LAB_WHY[1]++;
@@ -82,17 +87,18 @@ public class IceFloeSpawner {
                 LAB_WHY[3]++;
                 continue;
             }
-            if (!level.getBiome(at).value().coldEnoughToSnow(at)) {
+            if (!IceFloe.cold(level, at)) {
                 LAB_WHY[4]++;
                 continue;
             }
-            if (!HydrologyManager.isMountainRiverWater(x, top, z)) {
+            if (pick < mountain ? !HydrologyManager.isMountainRiverWater(x, top, z) : !HydrologyManager.inLowlandWater(x, z)) {
                 LAB_WHY[5]++;
                 continue;
             }
             if (rnd.nextInt(rate.chance()) != 0) continue;
             setGroupAfloat(level, x, top, z, rnd);
             LAB_WHY[6]++;
+            if (pick >= mountain) LAB_WHY[7]++;
             return;
         }
     }

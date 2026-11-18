@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:outback", "regions_unexplored:arid_mountains"]
+  },
+  "rapids": ["minecraft:red_sand*2", "minecraft:gravel*2", "minecraft:cobblestone", "minecraft:terracotta"],
+  "silt": ["minecraft:red_sand*3", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:red_sand*2", "minecraft:coarse_dirt"],
+  "bars": ["minecraft:red_sand*3"],
+  "flats": ["keep*3", "minecraft:red_sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

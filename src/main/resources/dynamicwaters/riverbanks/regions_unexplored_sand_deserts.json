@@ -1,0 +1,13 @@
+{
+  "mod": "regions_unexplored",
+  "where": {
+    "biomes": ["regions_unexplored:saguaro_desert", "regions_unexplored:baobab_savanna"]
+  },
+  "rapids": ["minecraft:sand*2", "minecraft:gravel*2", "minecraft:sandstone"],
+  "silt": ["minecraft:sand*4", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:sand*2", "minecraft:coarse_dirt"],
+  "bars": ["minecraft:sand*3"],
+  "flats": ["keep*3", "minecraft:sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

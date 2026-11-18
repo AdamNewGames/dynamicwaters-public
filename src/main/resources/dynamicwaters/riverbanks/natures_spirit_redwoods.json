@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:redwood_forest", "natures_spirit:snowy_redwood_forest"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:mossy_cobblestone*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:mud*2", "minecraft:gravel*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:podzol*2", "minecraft:coarse_dirt", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:gravel*3"],
+  "flats": ["keep*3", "minecraft:podzol"],
+  "patch_size": 5,
+  "shore_height": 1
+}

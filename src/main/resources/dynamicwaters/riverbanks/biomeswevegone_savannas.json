@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:araucaria_savanna", "biomeswevegone:baobab_savanna", "biomeswevegone:ironwood_gour",
+      "biomeswevegone:firecracker_chaparral"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone*2", "minecraft:coarse_dirt"],
+  "silt": ["minecraft:sand*2", "minecraft:coarse_dirt*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:coarse_dirt*2", "biomeswevegone:sandy_dirt"],
+  "bars": ["minecraft:sand*3", "minecraft:gravel"],
+  "flats": ["keep*3", "biomeswevegone:sandy_dirt"],
+  "patch_size": 5,
+  "shore_height": 1
+}

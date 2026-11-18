@@ -29,6 +29,17 @@ public class MultiNoiseBiomeSourceMixin {
     private static final int DYNAMICWATERS_FROZEN_REACH = 3;
 
     @Unique
+    private static final double DYNAMICWATERS_BIOME_INSET = 0.5, DYNAMICWATERS_BIOME_LEAST = 2.9,
+            DYNAMICWATERS_BIOME_DRY = 1.0;
+
+    @Unique
+    private static boolean dynamicwaters$inRiverWater(RiverContext info, double x, double z) {
+        final double r = HydrologyManager.routeWaterRadius(info.edge(), x, z);
+        if (r < DYNAMICWATERS_BIOME_DRY) return false;
+        return info.distSq() < Math.pow(Math.max(r - DYNAMICWATERS_BIOME_INSET, DYNAMICWATERS_BIOME_LEAST), 2.0);
+    }
+
+    @Unique
     private boolean dynamicwaters$coldLand(int x, int z, net.minecraft.world.level.biome.Climate.Sampler sampler) {
         final MultiNoiseBiomeSource source = (MultiNoiseBiomeSource) (Object) this;
         final int r = DYNAMICWATERS_FROZEN_REACH;
@@ -81,7 +92,8 @@ public class MultiNoiseBiomeSourceMixin {
                 try {
                     RiverContext info = MainRivers.findNearest(worldX, worldZ, HydrologyManager.getGlobalGenerator(), HydrologyManager.getDummyAccessor(), HydrologyManager.getGlobalRandomState());
 
-                    if (info != null && info.normDistSq() < 0.25 && !HydrologyManager.riverSplitLand(worldX, worldZ)) {
+                    if (info != null && dynamicwaters$inRiverWater(info, worldX, worldZ)
+                            && !HydrologyManager.riverSplitLand(worldX, worldZ)) {
                         final Holder<Biome> frozen = dynamicwaters$frozenRiverBiome;
                         cir.setReturnValue(frozen != null && dynamicwaters$coldLand(x, z, sampler) ? frozen : cachedRiverBiome);
                         return;

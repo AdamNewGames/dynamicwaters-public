@@ -166,7 +166,7 @@ public final class ShoreSkin {
 
     private static double energy(HydrologyManager.RiverCarving c, int depth, boolean step) {
         if (step) return 1.0;
-        if (c.isLake) return lakeRun(depth);
+        if (c.isLake || c.oxbow) return lakeRun(depth);
         if (c.isMountainRiver) {
             final double t = c.channelWidth > 0.0 ? Math.min(1.0, c.distanceFromCenter / c.channelWidth) : 1.0;
             final double slack = lowlandRun(t, c.channelWidth >= WIDE_RIVER);
@@ -234,7 +234,8 @@ public final class ShoreSkin {
 
     static Holder<Biome> landBiome(Holder<Biome> here, int qx, int qy, int qz,
             BiomeSource biomeSource, Climate.Sampler sampler, Map<Long, Holder<Biome>> cache) {
-        if (biomeSource == null || sampler == null || !(here.is(Biomes.RIVER) || here.is(Biomes.FROZEN_RIVER))) return here;
+        if (biomeSource == null || sampler == null || !(here.is(Biomes.RIVER) || here.is(Biomes.FROZEN_RIVER)
+                || here.is(net.minecraft.tags.BiomeTags.IS_RIVER))) return here;
         final long key = ((long) qx & 0x3FFFFFL) | (((long) qz & 0x3FFFFFL) << 22) | (((long) qy & 0xFFFFFL) << 44);
         Holder<Biome> land = cache.get(key);
         if (land == null) {

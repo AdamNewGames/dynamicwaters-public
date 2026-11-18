@@ -1,0 +1,13 @@
+{
+  "mod": "natures_spirit",
+  "where": {
+    "biomes": ["natures_spirit:cypress_fields"]
+  },
+  "rapids": ["minecraft:gravel*3", "natures_spirit:kaolin*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:sand*2", "minecraft:clay*2", "natures_spirit:kaolin"],
+  "shore": ["keep*5", "minecraft:gravel", "natures_spirit:kaolin"],
+  "bars": ["minecraft:sand*2", "minecraft:gravel*2"],
+  "flats": ["keep*3", "natures_spirit:kaolin"],
+  "patch_size": 5,
+  "shore_height": 1
+}

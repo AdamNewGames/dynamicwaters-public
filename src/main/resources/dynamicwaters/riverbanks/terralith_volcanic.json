@@ -1,0 +1,13 @@
+{
+  "mod": "terralith",
+  "where": {
+    "biomes": ["terralith:volcanic_crater", "terralith:volcanic_peaks", "terralith:basalt_cliffs"]
+  },
+  "rapids": ["minecraft:basalt*2", "minecraft:blackstone*2", "minecraft:gravel*2", "minecraft:tuff"],
+  "silt": ["minecraft:gravel*3", "minecraft:tuff*2", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:smooth_basalt*2", "minecraft:gravel*2", "minecraft:tuff"],
+  "bars": ["minecraft:gravel*3", "minecraft:tuff"],
+  "flats": ["keep*3", "minecraft:gravel", "minecraft:tuff"],
+  "patch_size": 5,
+  "shore_height": 1
+}

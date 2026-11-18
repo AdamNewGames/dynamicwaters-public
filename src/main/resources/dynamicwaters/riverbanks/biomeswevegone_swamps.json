@@ -1,0 +1,14 @@
+{
+  "mod": "biomeswevegone",
+  "where": {
+    "biomes": ["biomeswevegone:bayou", "biomeswevegone:cypress_swamplands", "biomeswevegone:cypress_wetlands",
+      "biomeswevegone:white_mangrove_marshes"]
+  },
+  "rapids": ["minecraft:gravel*2", "minecraft:mossy_cobblestone*2", "biomeswevegone:peat"],
+  "silt": ["minecraft:mud*3", "biomeswevegone:peat*2", "minecraft:clay"],
+  "shore": ["keep*3", "minecraft:mud*2", "biomeswevegone:peat"],
+  "bars": ["minecraft:mud*2", "minecraft:sand"],
+  "flats": ["keep*2", "minecraft:mud*2"],
+  "patch_size": 5,
+  "shore_height": 1
+}

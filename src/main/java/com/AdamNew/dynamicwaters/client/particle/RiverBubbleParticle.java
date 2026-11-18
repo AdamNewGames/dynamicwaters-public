@@ -30,7 +30,7 @@ public class RiverBubbleParticle extends TextureSheetParticle {
             return;
         }
 
-        net.minecraft.world.phys.Vec3 flow = com.AdamNew.dynamicwaters.HydrologyManager.getRiverFlow(this.x, (int)this.y, this.z, this.level);
+        net.minecraft.world.phys.Vec3 flow = com.AdamNew.dynamicwaters.HydrologyManager.seenRiverFlow(this.x, (int)this.y, this.z, this.level);
         if (flow.lengthSqr() > 0.001) {
             this.xd = this.xd * 0.9 + flow.x * 0.02;
             this.zd = this.zd * 0.9 + flow.z * 0.02;
